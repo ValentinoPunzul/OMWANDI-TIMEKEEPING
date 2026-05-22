@@ -1,0 +1,4 @@
+node_modules
+.oops
+error.log
+data/hr_dispatched/

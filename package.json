@@ -1,0 +1,20 @@
+{
+  "name": "chronos-flow",
+  "version": "1.0.0",
+  "description": "Premium Full-Stack Mobile PWA Timekeeper with Offline Sync and SQLite Database",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "sqlite3": "^5.1.7",
+    "firebase-admin": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Antigravity Dev Team",
+  "license": "MIT"
+}
