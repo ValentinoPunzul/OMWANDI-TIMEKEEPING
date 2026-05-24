@@ -8,7 +8,9 @@ const state = {
   timeEntries: [],
   activeProfileId: localStorage.getItem('chronos_user_id') || null, 
   activeView: 'dashboard',
-  isOnline: navigator.onLine
+  isOnline: navigator.onLine,
+  employeeSortField: 'emp_no',
+  employeeSortDir: 'asc'
 };
 
 const API_BASE = window.location.origin;
@@ -156,6 +158,26 @@ function renderTimesheets(container) {
 }
 
 function renderSettings(container) {
+    const sortedEmployees = [...state.employees].sort((a, b) => {
+        let valA = a[state.employeeSortField] || '';
+        let valB = b[state.employeeSortField] || '';
+        if (state.employeeSortField === 'emp_no') {
+            valA = parseInt(valA) || 0;
+            valB = parseInt(valB) || 0;
+        } else {
+            valA = valA.toString().toLowerCase();
+            valB = valB.toString().toLowerCase();
+        }
+        if (valA < valB) return state.employeeSortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return state.employeeSortDir === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    const getSortIcon = (field) => {
+        if (state.employeeSortField !== field) return '↕️';
+        return state.employeeSortDir === 'asc' ? '🔼' : '🔽';
+    };
+
     container.innerHTML = `
         <div class="view-header"><h2>Settings</h2></div>
         
@@ -219,8 +241,17 @@ function renderSettings(container) {
             <h3>Employee List</h3>
             <div style="overflow-x:auto;">
                 <table style="width:100%; margin-top:20px;">
-                    <thead><tr style="text-align:left; color:var(--text-muted); font-size:0.8rem;"><th>No</th><th>Name</th><th>Designation</th><th>Dept</th><th>Reports To</th><th>Actions</th></tr></thead>
-                    <tbody>${state.employees.map(e => `
+                    <thead>
+                        <tr style="text-align:left; color:var(--text-muted); font-size:0.8rem; cursor:pointer;">
+                            <th onclick="setEmployeeSort('emp_no')">No ${getSortIcon('emp_no')}</th>
+                            <th onclick="setEmployeeSort('name')">Name ${getSortIcon('name')}</th>
+                            <th onclick="setEmployeeSort('designation')">Designation ${getSortIcon('designation')}</th>
+                            <th onclick="setEmployeeSort('department')">Dept ${getSortIcon('department')}</th>
+                            <th onclick="setEmployeeSort('reports_to')">Reports To ${getSortIcon('reports_to')}</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>${sortedEmployees.map(e => `
                         <tr style="border-bottom:1px solid var(--glass-border);">
                             <td style="padding:12px 0;">${e.emp_no || ''}</td>
                             <td>${e.name || ''}</td>
@@ -240,6 +271,16 @@ function renderSettings(container) {
         <div class="glass-container"><h3>System Actions</h3><button class="btn primary" style="margin-top:20px;" onclick="triggerHrDispatchFlow()">Dispatch HR Report (CSV)</button></div>
     `;
 }
+
+window.setEmployeeSort = (field) => {
+    if (state.employeeSortField === field) {
+        state.employeeSortDir = state.employeeSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.employeeSortField = field;
+        state.employeeSortDir = 'asc';
+    }
+    renderSettings(document.getElementById('mainContent'));
+};
 
 async function handleUserSubmit() {
     const name = document.getElementById('userName').value;
