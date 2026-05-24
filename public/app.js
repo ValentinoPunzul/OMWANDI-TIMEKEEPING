@@ -167,7 +167,7 @@ async function startTimer() {
 }
 
 function renderProjects(container) {
-    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:16px;"><h3>${p.name}</h3><p style="color:var(--text-muted)">${p.client}</p></div>`).join('');
+    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:16px;"><h3>[${p.proj_no || '---'}] ${p.name}</h3><p style="color:var(--text-muted)">${p.client}</p></div>`).join('');
     container.innerHTML = `<div class="view-header"><h2>Projects</h2></div><div class="projects-grid">${html}</div>`;
 }
 
@@ -182,32 +182,6 @@ function renderTimesheets(container) {
     container.innerHTML = `<div class="view-header"><h2>Timesheets</h2></div><div id="timesheetEditForm" class="glass-container hidden" style="margin-bottom:20px;"><h3>Edit Entry</h3><input type="hidden" id="editEntryId"><div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-top:15px;"><div><label style="font-size:0.7rem; opacity:0.7;">HOURS</label><input type="number" step="0.1" id="editEntryHours" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div><label style="font-size:0.7rem; opacity:0.7;">TASK</label><input type="text" id="editEntryTask" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div style="display:flex; align-items:flex-end; gap:10px;"><button class="btn primary" onclick="saveTimesheetEdit()">Save</button><button class="btn outline" onclick="document.getElementById('timesheetEditForm').classList.add('hidden')">Cancel</button></div></div></div><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Hours</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
 
-window.editTimesheetEntry = (id) => {
-    const entry = state.timeEntries.find(e => e.id === id);
-    if (!entry) return;
-    document.getElementById('editEntryId').value = entry.id;
-    document.getElementById('editEntryHours').value = entry.total_hours;
-    document.getElementById('editEntryTask').value = entry.task || 'Development';
-    document.getElementById('timesheetEditForm').classList.remove('hidden');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-};
-
-window.saveTimesheetEdit = async () => {
-    const id = document.getElementById('editEntryId').value;
-    const hours = document.getElementById('editEntryHours').value;
-    const task = document.getElementById('editEntryTask').value;
-    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ total_hours: parseFloat(hours), task: task }) });
-    await initializeState();
-    renderTimesheets(document.getElementById('mainContent'));
-};
-
-window.deleteTimesheetEntry = async (id) => {
-    if (!confirm('Delete entry?')) return;
-    await apiRequest(`/api/entries/${id}`, { method: 'DELETE' });
-    await initializeState();
-    renderTimesheets(document.getElementById('mainContent'));
-};
-
 function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
     const sortedEmployees = [...state.employees].sort((a, b) => {
@@ -219,8 +193,7 @@ function renderSettings(container) {
         return 0;
     });
     const getSortIcon = (f) => state.employeeSortField !== f ? '↕️' : (state.employeeSortDir === 'asc' ? '🔼' : '🔽');
-    
-    const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
 
     container.innerHTML = `
         <div class="view-header"><h2>Settings</h2></div>
@@ -238,12 +211,12 @@ function renderSettings(container) {
             <div id="projectForm" class="settings-form">
                 <input type="hidden" id="projectId">
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Project Number (Unique)</label><input type="text" id="projectNo" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                     <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Project Name</label><input type="text" id="projectName" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Client Name</label><input type="text" id="projectClient" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                 </div>
-                <div class="form-row" style="display:grid; grid-template-columns: 1fr 44px; gap:16px; margin-bottom:16px;">
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Theme Color</label></div>
-                    <input type="color" id="projectColor" value="#6366f1" style="height:44px; width:44px; border:none; background:none; padding:0; cursor:pointer;">
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Client Name</label><input type="text" id="projectClient" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Theme Color</label><input type="color" id="projectColor" value="#6366f1" style="height:44px; width:100%; border:none; background:none; padding:0; cursor:pointer;"></div>
                 </div>
                 <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;">
                     <button class="btn primary" onclick="handleProjectSubmit()">Save Project</button>
@@ -259,19 +232,19 @@ function renderSettings(container) {
             <div id="userFormContainer" class="settings-form" style="margin-top:20px;">
                 <input type="hidden" id="userId">
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Employee Number</label><input type="text" id="userEmpNo" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Full Name</label><input type="text" id="userName" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Employee Number</label><input type="text" id="userEmpNo" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Full Name</label><input type="text" id="userName" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                 </div>
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Designation</label><input type="text" id="userDesignation" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Department</label><input type="text" id="userDepartment" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Designation</label><input type="text" id="userDesignation" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Department</label><input type="text" id="userDepartment" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                 </div>
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Access Role</label><select id="userAccessRole" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"><option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option></select></div>
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Reports To</label><input type="text" id="userReportsTo" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Reports To</label><input type="text" id="userReportsTo" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                 </div>
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 44px; gap:16px; margin-bottom:16px;">
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Avatar URL</label><input type="text" id="userAvatarUrl" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Avatar URL</label><input type="text" id="userAvatarUrl" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:6px;"></div>
                     <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:4px; text-transform:uppercase; font-weight:800; opacity:0.7;">Color</label><input type="color" id="userColor" value="#6366f1" style="height:44px; width:44px; border:none; background:none; padding:0; cursor:pointer;"></div>
                 </div>
                 <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;"><button class="btn primary" onclick="handleUserSubmit()">Save Employee</button><button class="btn outline" onclick="resetUserForm()">Clear</button></div>
@@ -298,26 +271,29 @@ window.handleProjectSelect = (id) => {
     const project = state.projects.find(p => p.id === id);
     if (project) {
         document.getElementById('projectId').value = project.id;
+        document.getElementById('projectNo').value = project.proj_no || '';
         document.getElementById('projectName').value = project.name;
         document.getElementById('projectClient').value = project.client || '';
         document.getElementById('projectColor').value = project.color || '#6366f1';
         document.getElementById('projectFormTitle').textContent = 'Edit Project: ' + project.name;
         document.getElementById('deleteProjectBtn').style.display = 'inline-block';
-    } else {
-        resetProjectForm();
-    }
+        document.getElementById('projectNo').readOnly = true; // No editing the unique ID
+    } else { resetProjectForm(); }
 };
 
 window.handleProjectSubmit = async () => {
+    const projNo = document.getElementById('projectNo').value;
     const name = document.getElementById('projectName').value;
-    if (!name) return alert('Project name is required');
+    if (!projNo || !name) return alert('Project Number and Name are required');
     const data = {
+        proj_no: projNo,
         name: name,
         client: document.getElementById('projectClient').value,
-        color: document.getElementById('projectColor').value
+        color: document.getElementById('projectColor').value,
+        id: 'proj_' + projNo // Use project number as the main ID suffix
     };
-    const id = document.getElementById('projectId').value;
-    if (id) await apiRequest(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    const id = document.getElementById('projectId').value || data.id;
+    if (document.getElementById('projectId').value) await apiRequest(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     else await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(data) });
     await initializeState();
     renderSettings(document.getElementById('mainContent'));
@@ -325,7 +301,7 @@ window.handleProjectSubmit = async () => {
 
 window.deleteProject = async () => {
     const id = document.getElementById('projectId').value;
-    if (!id || !confirm('Are you sure you want to delete this project? This will not remove existing time entries but may break links.')) return;
+    if (!id || !confirm('Are you sure you want to delete this project?')) return;
     await apiRequest(`/api/projects/${id}`, { method: 'DELETE' });
     await initializeState();
     renderSettings(document.getElementById('mainContent'));
@@ -333,11 +309,13 @@ window.deleteProject = async () => {
 
 window.resetProjectForm = () => {
     document.getElementById('projectId').value = '';
+    document.getElementById('projectNo').value = '';
     document.getElementById('projectName').value = '';
     document.getElementById('projectClient').value = '';
     document.getElementById('projectColor').value = '#6366f1';
     document.getElementById('projectFormTitle').textContent = 'Project Management';
     document.getElementById('projectSelect').value = '';
+    document.getElementById('projectNo').readOnly = false;
     const delBtn = document.getElementById('deleteProjectBtn');
     if (delBtn) delBtn.style.display = 'none';
 };
