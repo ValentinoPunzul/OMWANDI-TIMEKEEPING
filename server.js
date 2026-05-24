@@ -9,7 +9,6 @@ const PORT = process.env.PORT || 8080;
 
 // Initialize Firebase Admin SDK
 let serviceAccount;
-// Check all possible variations of the environment variable name
 const saEnvVar = process.env.FIREBASE_SERVICE_ACCOUNT || 
                  process.env.firebase_service_account || 
                  process.env['firebase-service-account'];
@@ -19,7 +18,7 @@ if (saEnvVar) {
     serviceAccount = JSON.parse(saEnvVar);
     console.log('Firebase Service Account loaded from environment variable.');
   } catch (e) {
-    console.error('Failed to parse Service Account environment variable. Ensure it is a valid JSON string.');
+    console.error('Failed to parse Service Account environment variable.');
   }
 }
 
@@ -30,9 +29,7 @@ if (!serviceAccount) {
       serviceAccount = require(saPath);
       console.log('Firebase Service Account loaded from local file.');
     }
-  } catch (e) {
-    // Local file not found, expected in production
-  }
+  } catch (e) {}
 }
 
 if (serviceAccount) {
@@ -45,8 +42,6 @@ if (serviceAccount) {
   } catch (error) {
     console.error('Firebase Initialization Error:', error.message);
   }
-} else {
-  console.warn('WARNING: No Firebase Credentials found. App will run in demo mode with no database connection.');
 }
 
 const db = admin.apps.length ? admin.database() : null;
@@ -57,9 +52,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Middleware to ensure DB is ready
 const checkDb = (req, res, next) => {
-  if (!db) return res.status(503).json({ error: 'Database connection not established. Check server logs.' });
+  if (!db) return res.status(503).json({ error: 'Database connection not established.' });
   next();
 };
+
+const DATA_DIR = path.join(__dirname, 'data');
+const DISPATCH_DIR = path.join(DATA_DIR, 'hr_dispatched');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(DISPATCH_DIR)) fs.mkdirSync(DISPATCH_DIR, { recursive: true });
 
 // ============================================
 // API ROUTES
@@ -74,17 +74,10 @@ app.get('/api/employees', checkDb, async (req, res) => {
 });
 
 app.post('/api/employees', checkDb, async (req, res) => {
-  const { name, role } = req.body;
-  if (!name || !role) return res.status(400).json({ error: 'Name and Role required' });
   const id = req.body.id || 'emp_' + Date.now();
   const emp = { ...req.body, id };
   await db.ref('employees/' + id).set(emp);
   res.status(201).json(emp);
-});
-
-app.put('/api/employees/:id', checkDb, async (req, res) => {
-  await db.ref('employees/' + req.params.id).update(req.body);
-  res.json({ id: req.params.id, ...req.body });
 });
 
 app.delete('/api/employees/:id', checkDb, async (req, res) => {
@@ -138,11 +131,6 @@ app.post('/api/entries', checkDb, async (req, res) => {
   res.status(201).json(entry);
 });
 
-app.delete('/api/entries/:id', checkDb, async (req, res) => {
-  await db.ref('time_entries/' + req.params.id).remove();
-  res.json({ success: true });
-});
-
 app.post('/api/sync', checkDb, async (req, res) => {
   const { entries } = req.body;
   const updates = {};
@@ -151,10 +139,27 @@ app.post('/api/sync', checkDb, async (req, res) => {
   res.json({ status: 'success', syncedCount: entries.length });
 });
 
+// 4. HR Exporter and Dispatch
+app.post('/api/hr/dispatch', checkDb, async (req, res) => {
+  try {
+    const snapshot = await db.ref('time_entries').once('value');
+    const rows = Object.values(snapshot.val() || {});
+    if (rows.length === 0) return res.status(404).json({ error: 'No data' });
+
+    const csvHeaders = ['Date', 'Project', 'Task', 'Hours'];
+    const csvRows = rows.map(r => [r.start_time.split('T')[0], r.project_id, r.task, r.total_hours].join(','));
+    const content = [csvHeaders.join(','), ...csvRows].join('\n');
+    const filename = `HR_Report_${Date.now()}.csv`;
+    fs.writeFileSync(path.join(DISPATCH_DIR, filename), content);
+
+    res.json({ status: 'success', dispatchedFile: filename });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Chronos Flow running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
