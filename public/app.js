@@ -6,7 +6,7 @@ const state = {
   employees: [],
   projects: [],
   timeEntries: [],
-  activeProfileId: 'emp_1', 
+  activeProfileId: localStorage.getItem('chronos_user_id') || null, 
   activeView: 'dashboard',
   isOnline: navigator.onLine,
   activeTimer: { running: false, startTime: null, secondsElapsed: 0, projectId: '', task: 'Development', description: '', intervalId: null },
@@ -20,12 +20,55 @@ const API_BASE = window.location.origin;
 window.addEventListener('DOMContentLoaded', () => {
   setupNetworkMonitoring();
   setupPWAServiceWorker();
+  
+  // Initial state fetch happens regardless of login to populate employee list for validation
   initializeState().then(() => {
     setupGlobalEventListeners();
-    switchView(state.activeView);
+    checkAuth();
     startDashboardClock();
   });
 });
+
+function checkAuth() {
+    const loginOverlay = document.getElementById('loginOverlay');
+    const appLayout = document.getElementById('appLayout');
+    
+    if (state.activeProfileId) {
+        // Logged in
+        loginOverlay.classList.add('hidden');
+        appLayout.classList.remove('hidden');
+        switchView(state.activeView);
+    } else {
+        // Not logged in
+        loginOverlay.classList.remove('hidden');
+        appLayout.classList.add('hidden');
+    }
+}
+
+function handleLogin(e) {
+    e.preventDefault();
+    const empNoInput = document.getElementById('loginEmpNo').value.trim();
+    const errorEl = document.getElementById('loginError');
+    
+    // Find employee with matching emp_no
+    const employee = state.employees.find(emp => emp.emp_no === empNoInput);
+    
+    if (employee) {
+        state.activeProfileId = employee.id;
+        localStorage.setItem('chronos_user_id', employee.id);
+        errorEl.classList.add('hidden');
+        checkAuth();
+        showNotification(`Welcome back, ${employee.name}!`, 'success');
+    } else {
+        errorEl.classList.remove('hidden');
+    }
+}
+
+function handleLogout() {
+    state.activeProfileId = null;
+    localStorage.removeItem('chronos_user_id');
+    checkAuth();
+}
 
 function setupPWAServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -192,7 +235,8 @@ function renderTeam(container) {
 }
 
 function renderTimesheets(container) {
-    container.innerHTML = `<div class="view-header"><h2>Timesheets</h2></div><p>Database view connected to Firebase.</p>`;
+    const rowsHtml = state.timeEntries.map(e => `<tr><td>${e.start_time.split('T')[0]}</td><td>${getEmployee(e.employee_id)?.name || 'Unknown'}</td><td>${getProject(e.project_id).name}</td><td>${e.total_hours.toFixed(1)}</td></tr>`).join('');
+    container.innerHTML = `<div class="view-header"><h2>Timesheets</h2></div><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Hours</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
 }
 
 function setupNetworkMonitoring() {
@@ -213,19 +257,35 @@ function setupGlobalEventListeners() {
         item.addEventListener('click', (e) => switchView(e.currentTarget.getAttribute('data-view')));
     });
     
-    // Defensive listeners
-    const pauseBtn = document.getElementById('stripPauseBtn');
-    if (pauseBtn) pauseBtn.addEventListener('click', () => {});
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) loginForm.addEventListener('submit', handleLogin);
     
-    const stopBtn = document.getElementById('stripStopBtn');
-    if (stopBtn) stopBtn.addEventListener('click', () => {});
-    
-    const settingsBtn = document.getElementById('triggerSettings');
-    if (settingsBtn) settingsBtn.addEventListener('click', () => alert('Settings coming soon.'));
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 }
 
 function getProject(id) { return state.projects.find(p => p.id === id) || { name: 'Internal', color: '#888' }; }
 function getEmployee(id) { return state.employees.find(e => e.id === id); }
 
-function getMockEmployees() { return [{ id: 'emp_1', name: 'Sophia Lin', role: 'Lead Developer', color: '#6366f1', avatar: 'SL' }]; }
+function getMockEmployees() { return [{ id: 'emp_1', name: 'Sophia Lin', role: 'Lead Developer', color: '#6366f1', avatar: 'SL', emp_no: 'E001' }]; }
 function getMockProjects() { return [{ id: 'proj_1', name: 'Mars Rover UI', client: 'SpaceX', budget_hours: 120, color: '#a855f7' }]; }
+
+function showNotification(msg, type) {
+    const c = document.getElementById('notificationContainer');
+    if (!c) return;
+    const n = document.createElement('div');
+    n.className = `notification ${type}`;
+    n.textContent = msg;
+    c.appendChild(n);
+    setTimeout(() => n.remove(), 3000);
+}
+
+async function triggerHrDispatchFlow() {
+  showNotification('Compiling report...', 'info');
+  try {
+    const res = await apiRequest('/api/hr/dispatch', { method: 'POST', body: JSON.stringify({ hr_email: state.hrConfig.email }) });
+    showNotification('Report sent to HR!', 'success');
+  } catch (e) {
+    showNotification('Dispatch failed.', 'error');
+  }
+}
