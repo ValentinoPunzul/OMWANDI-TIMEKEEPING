@@ -39,7 +39,6 @@ function checkAuth() {
             if (appLayout) appLayout.classList.remove('hidden');
             switchView(state.activeView);
         } else {
-            // User ID in localstorage no longer exists in DB
             handleLogout();
         }
     } else {
@@ -203,23 +202,52 @@ function renderSettings(container) {
             <h3>User Management</h3>
             <div id="userFormContainer" class="settings-form" style="margin-top:20px;">
                 <input type="hidden" id="userId">
+                
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userEmpNo" placeholder="Employee Number" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
-                    <input type="text" id="userName" placeholder="Full Name" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Employee Number</label>
+                        <input type="text" id="userEmpNo" placeholder="e.g. 4745" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Full Name</label>
+                        <input type="text" id="userName" placeholder="e.g. Romano Gaseb" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
                 </div>
+
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userDesignation" placeholder="Designation" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
-                    <input type="text" id="userDepartment" placeholder="Department" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Designation</label>
+                        <input type="text" id="userDesignation" placeholder="e.g. Team Leader" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Department</label>
+                        <input type="text" id="userDepartment" placeholder="e.g. Projects" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
                 </div>
+
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userSubDepartment" placeholder="Sub Department" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
-                    <input type="text" id="userReportsTo" placeholder="Reports To" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Sub Department</label>
+                        <input type="text" id="userSubDepartment" placeholder="e.g. Marine Outfitting" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Reports To</label>
+                        <input type="text" id="userReportsTo" placeholder="e.g. Herman Karsten" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
                 </div>
+
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 44px; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userAvatarUrl" placeholder="Avatar URL" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
-                    <input type="color" id="userColor" value="#6366f1" style="height:40px; width:44px; border:none; background:none; padding:0;">
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Avatar URL</label>
+                        <input type="text" id="userAvatarUrl" placeholder="https://..." class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:1px;">Color</label>
+                        <input type="color" id="userColor" value="#6366f1" style="height:40px; width:44px; border:none; background:none; padding:0; cursor:pointer;">
+                    </div>
                 </div>
-                <div class="btn-group" style="display:flex; gap:12px;">
+
+                <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;">
                     <button class="btn primary" onclick="handleUserSubmit()">Save Employee</button>
                     <button class="btn outline" onclick="resetUserForm()">Clear</button>
                 </div>
@@ -263,6 +291,8 @@ function renderSettings(container) {
 
 async function handleUserSubmit() {
     const name = document.getElementById('userName').value;
+    if(!name) return alert('Name is required');
+    
     const userData = {
         emp_no: document.getElementById('userEmpNo').value,
         name: name,
@@ -286,7 +316,7 @@ async function handleUserSubmit() {
         }
         await initializeState();
         renderSettings(document.getElementById('mainContent'));
-        checkAuth(); // Refresh sidebar card
+        checkAuth(); 
     } catch (e) { showNotification('Failed to save user.', 'error'); }
 }
 
