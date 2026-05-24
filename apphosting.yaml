@@ -1,7 +1,4 @@
 # Firebase App Hosting configuration
 # This file defines how your application environment is configured.
-
-env:
-  - variable: FIREBASE_SERVICE_ACCOUNT
-    # We removed the 'secret' line to use the Environment Variable 
-    # you added manually in the Firebase Console.
+# Note: Sensitive environment variables like FIREBASE_SERVICE_ACCOUNT 
+# are managed directly in the Firebase Console under App Hosting > Settings.
