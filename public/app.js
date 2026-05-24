@@ -22,7 +22,7 @@ window.addEventListener('DOMContentLoaded', () => {
     setupGlobalEventListeners();
     checkAuth();
     startDashboardClock();
-    startDataRefresh(); // New: Periodic background refresh
+    startDataRefresh();
   });
 });
 
@@ -68,7 +68,6 @@ async function initializeState() {
 }
 
 function startDataRefresh() {
-    // Refresh dashboard data every 60 seconds
     setInterval(async () => {
         await initializeState();
         if (state.activeView === 'dashboard') {
@@ -122,7 +121,6 @@ function renderDashboard(container) {
         if (!grouped[timer.project_id]) grouped[timer.project_id] = [];
         grouped[timer.project_id].push(timer);
     });
-
     let activeTimersHtml = activeTimers.length === 0 ? `<div style="text-align:center; color:var(--text-muted); padding:40px;">No active sessions.</div>` : 
         Object.entries(grouped).map(([projectId, timers]) => {
             const project = state.projects.find(p => p.id === projectId) || { name: 'Internal', color: '#6366f1' };
@@ -155,12 +153,18 @@ function renderDashboard(container) {
     container.innerHTML = `<div class="dashboard-container"><div class="clock-card glass-container"><div class="dashboard-time" id="dashboardTime">00:00:00</div><div class="dashboard-date" id="dashboardDate">LOADING...</div></div><div class="active-timers-section"><div class="section-label"><span class="pulse-emerald"></span>ACTIVE PROJECT SESSIONS</div>${activeTimersHtml}</div></div>`;
 }
 
+function roundToQuarter(hours) {
+    return Math.floor(hours * 4) / 4;
+}
+
 async function stopUserTimer(id) {
     if (!confirm('Stop tracking?')) return;
     const entry = state.timeEntries.find(e => e.id === id);
     if (!entry) return;
-    const hours = Math.abs(new Date() - new Date(entry.start_time)) / 36e5;
-    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: new Date().toISOString(), total_hours: parseFloat(hours.toFixed(2)) }) });
+    const now = new Date();
+    const rawHours = Math.abs(now - new Date(entry.start_time)) / 36e5;
+    const roundedHours = roundToQuarter(rawHours);
+    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: now.toISOString(), total_hours: roundedHours }) });
     await initializeState();
     if (state.activeView === 'dashboard') renderDashboard(document.getElementById('mainContent'));
     else if (state.activeView === 'timer') renderTimer(document.getElementById('mainContent'));
@@ -183,7 +187,12 @@ async function startTimer() {
 }
 
 function renderProjects(container) {
-    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:16px;"><h3>[${p.proj_no || '---'}] ${p.name}</h3><p style="color:var(--text-muted)">${p.client}</p></div>`).join('');
+    const html = state.projects.map(p => `
+        <div class="glass-container" style="margin-bottom:16px;">
+            <h3>[${p.proj_no || '---'}] ${p.name}</h3>
+            <p style="color:var(--text-muted)">Client: ${p.client || '---'}</p>
+            <p style="color:var(--text-muted)">Vessel: ${p.vessel_name || '---'}</p>
+        </div>`).join('');
     container.innerHTML = `<div class="view-header"><h2>Projects</h2></div><div class="projects-grid">${html}</div>`;
 }
 
@@ -194,9 +203,39 @@ function renderTeam(container) {
 
 function renderTimesheets(container) {
     const canEdit = state.userRole === 'Administrator' || state.userRole === 'Editor';
-    const rowsHtml = state.timeEntries.map(e => `<tr style="border-bottom:1px solid var(--glass-border);"><td>${e.start_time.split('T')[0]}</td><td>${e.employee_name || 'User'}</td><td>${e.project_name || 'Project'}</td><td>${(e.total_hours || 0).toFixed(1)} h</td>${canEdit ? `<td style="text-align:right;"><button class="btn-text" style="color:var(--accent-primary);" onclick="editTimesheetEntry('${e.id}')">Edit</button><button class="btn-text" style="color:#ef4444; margin-left:10px;" onclick="deleteTimesheetEntry('${e.id}')">Del</button></td>` : '<td></td>'}</tr>`).join('');
-    container.innerHTML = `<div class="view-header"><h2>Timesheets</h2></div><div id="timesheetEditForm" class="glass-container hidden" style="margin-bottom:20px;"><h3>Edit Entry</h3><input type="hidden" id="editEntryId"><div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-top:15px;"><div><label style="font-size:0.7rem; opacity:0.7;">HOURS</label><input type="number" step="0.1" id="editEntryHours" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div><label style="font-size:0.7rem; opacity:0.7;">TASK</label><input type="text" id="editEntryTask" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div style="display:flex; align-items:flex-end; gap:10px;"><button class="btn primary" onclick="saveTimesheetEdit()">Save</button><button class="btn outline" onclick="document.getElementById('timesheetEditForm').classList.add('hidden')">Cancel</button></div></div></div><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Hours</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+    const rowsHtml = state.timeEntries.map(e => {
+        const start = new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const end = e.end_time ? new Date(e.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+        return `<tr style="border-bottom:1px solid var(--glass-border);"><td>${e.start_time.split('T')[0]}</td><td>${e.employee_name || 'User'}</td><td>${e.project_name || 'Project'}</td><td>${start} - ${end}</td><td>${(e.total_hours || 0).toFixed(2)} h</td>${canEdit ? `<td style="text-align:right;"><button class="btn-text" style="color:var(--accent-primary);" onclick="editTimesheetEntry('${e.id}')">Edit</button><button class="btn-text" style="color:#ef4444; margin-left:10px;" onclick="deleteTimesheetEntry('${e.id}')">Del</button></td>` : '<td></td>'}</tr>`;
+    }).join('');
+    container.innerHTML = `<div class="view-header"><h2>Timesheets</h2></div><div id="timesheetEditForm" class="glass-container hidden" style="margin-bottom:20px;"><h3>Edit Entry</h3><input type="hidden" id="editEntryId"><div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:15px; margin-top:15px;"><div><label style="font-size:0.7rem; opacity:0.7;">HOURS</label><input type="number" step="0.25" id="editEntryHours" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div><label style="font-size:0.7rem; opacity:0.7;">TASK</label><input type="text" id="editEntryTask" class="form-control" style="width:100%; padding:8px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff;"></div><div style="display:flex; align-items:flex-end; gap:10px;"><button class="btn primary" onclick="saveTimesheetEdit()">Save</button><button class="btn outline" onclick="document.getElementById('timesheetEditForm').classList.add('hidden')">Cancel</button></div></div></div><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Time (Start-End)</th><th>Hours</th><th style="text-align:right;">Actions</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
+
+window.editTimesheetEntry = (id) => {
+    const entry = state.timeEntries.find(e => e.id === id);
+    if (!entry) return;
+    document.getElementById('editEntryId').value = entry.id;
+    document.getElementById('editEntryHours').value = entry.total_hours;
+    document.getElementById('editEntryTask').value = entry.task || 'Development';
+    document.getElementById('timesheetEditForm').classList.remove('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+window.saveTimesheetEdit = async () => {
+    const id = document.getElementById('editEntryId').value;
+    const hours = document.getElementById('editEntryHours').value;
+    const task = document.getElementById('editEntryTask').value;
+    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ total_hours: parseFloat(hours), task: task }) });
+    await initializeState();
+    renderTimesheets(document.getElementById('mainContent'));
+};
+
+window.deleteTimesheetEntry = async (id) => {
+    if (!confirm('Delete?')) return;
+    await apiRequest(`/api/entries/${id}`, { method: 'DELETE' });
+    await initializeState();
+    renderTimesheets(document.getElementById('mainContent'));
+};
 
 function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
@@ -223,7 +262,11 @@ function renderSettings(container) {
                 </div>
                 <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Client Name</label><input type="text" id="projectClient" class="form-control"></div>
-                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Theme Color</label><input type="color" id="projectColor" value="#6366f1" style="height:44px; width:44px; border:none; background:none; padding:0; cursor:pointer;"></div>
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Vessel Name</label><input type="text" id="projectVessel" class="form-control"></div>
+                </div>
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 44px; gap:16px; margin-bottom:16px;">
+                    <div><label style="display:block; font-size:0.7rem; color:#fff; margin-bottom:6px; text-transform:uppercase; font-weight:800; opacity:0.7;">Theme Color</label></div>
+                    <input type="color" id="projectColor" value="#6366f1" style="height:44px; width:44px; border:none; background:none; padding:0; cursor:pointer;">
                 </div>
                 <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;">
                     <button class="btn primary" onclick="handleProjectSubmit()">Save Project</button>
@@ -285,6 +328,7 @@ window.handleProjectSelect = (id) => {
         document.getElementById('projectNo').value = project.proj_no || '';
         document.getElementById('projectName').value = project.name;
         document.getElementById('projectClient').value = project.client || '';
+        document.getElementById('projectVessel').value = project.vessel_name || '';
         document.getElementById('projectColor').value = project.color || '#6366f1';
         document.getElementById('projectFormTitle').textContent = 'Edit Project: ' + project.name;
         const delBtn = document.getElementById('deleteProjectBtn');
@@ -297,7 +341,7 @@ window.handleProjectSubmit = async () => {
     const projNo = document.getElementById('projectNo').value;
     const name = document.getElementById('projectName').value;
     if (!projNo || !name) return alert('Project Number and Name are required');
-    const data = { proj_no: projNo, name: name, client: document.getElementById('projectClient').value, color: document.getElementById('projectColor').value, id: 'proj_' + projNo };
+    const data = { proj_no: projNo, name: name, client: document.getElementById('projectClient').value, vessel_name: document.getElementById('projectVessel').value, color: document.getElementById('projectColor').value, id: 'proj_' + projNo };
     const id = document.getElementById('projectId').value || data.id;
     if (document.getElementById('projectId').value) await apiRequest(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     else await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(data) });
@@ -312,7 +356,7 @@ window.deleteProject = async () => {
 };
 
 window.resetProjectForm = () => {
-    document.getElementById('projectId').value = ''; document.getElementById('projectNo').value = ''; document.getElementById('projectName').value = ''; document.getElementById('projectClient').value = ''; document.getElementById('projectColor').value = '#6366f1'; document.getElementById('projectFormTitle').textContent = 'Project Management'; document.getElementById('projectSelect').value = ''; document.getElementById('projectNo').readOnly = false;
+    document.getElementById('projectId').value = ''; document.getElementById('projectNo').value = ''; document.getElementById('projectName').value = ''; document.getElementById('projectClient').value = ''; document.getElementById('projectVessel').value = ''; document.getElementById('projectColor').value = '#6366f1'; document.getElementById('projectFormTitle').textContent = 'Project Management'; document.getElementById('projectSelect').value = ''; document.getElementById('projectNo').readOnly = false;
     const delBtn = document.getElementById('deleteProjectBtn'); if (delBtn) delBtn.style.display = 'none';
 };
 
