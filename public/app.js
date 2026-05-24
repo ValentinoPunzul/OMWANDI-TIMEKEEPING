@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CHRONOS FLOW - ACTIVE SESSIONS CLIENT
+   CHRONOS FLOW - PREMIUM ACTIVE SESSIONS CLIENT
    ========================================================================== */
 
 const state = {
@@ -25,10 +25,23 @@ window.addEventListener('DOMContentLoaded', () => {
 function checkAuth() {
     const loginOverlay = document.getElementById('loginOverlay');
     const appLayout = document.getElementById('appLayout');
+    
     if (state.activeProfileId) {
-        if (loginOverlay) loginOverlay.classList.add('hidden');
-        if (appLayout) appLayout.classList.remove('hidden');
-        switchView(state.activeView);
+        const me = state.employees.find(e => e.id === state.activeProfileId);
+        if (me) {
+            document.getElementById('activeName').textContent = me.name;
+            document.getElementById('activeRole').textContent = me.designation || me.role || 'Staff';
+            const avatarEl = document.getElementById('activeAvatar');
+            avatarEl.textContent = me.avatar || '??';
+            avatarEl.style.background = me.color || '#6366f1';
+            
+            if (loginOverlay) loginOverlay.classList.add('hidden');
+            if (appLayout) appLayout.classList.remove('hidden');
+            switchView(state.activeView);
+        } else {
+            // User ID in localstorage no longer exists in DB
+            handleLogout();
+        }
     } else {
         if (loginOverlay) loginOverlay.classList.remove('hidden');
         if (appLayout) appLayout.classList.add('hidden');
@@ -37,7 +50,6 @@ function checkAuth() {
 
 async function initializeState() {
   try {
-    console.log('Fetching initial state from:', API_BASE);
     const [employees, projects, entries] = await Promise.all([
       apiRequest('/api/employees'),
       apiRequest('/api/projects'),
@@ -46,29 +58,16 @@ async function initializeState() {
     state.employees = employees;
     state.projects = projects;
     state.timeEntries = entries;
-    console.log('State successfully synchronized with Cloud API.');
-  } catch (e) { 
-    console.error('API connection failed. Loading local data buffers.', e);
-    showNotification('Offline Mode: Using local cache', 'warning');
-    // Fallback data
-    state.employees = JSON.parse(localStorage.getItem('chronos_employees')) || [];
-    state.projects = JSON.parse(localStorage.getItem('chronos_projects')) || [];
-    state.timeEntries = JSON.parse(localStorage.getItem('chronos_entries')) || [];
-  }
+  } catch (e) { console.error('Init Error:', e); }
 }
 
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const defaultHeaders = { 'Content-Type': 'application/json' };
   options.headers = { ...defaultHeaders, ...options.headers };
-  try {
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.warn(`Request failed for ${endpoint}:`, err.message);
-    throw err;
-  }
+  const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
 }
 
 function startDashboardClock() {
@@ -204,23 +203,23 @@ function renderSettings(container) {
             <h3>User Management</h3>
             <div id="userFormContainer" class="settings-form" style="margin-top:20px;">
                 <input type="hidden" id="userId">
-                <div class="form-row">
-                    <input type="text" id="userEmpNo" placeholder="Employee Number (e.g. E001)" class="form-control">
-                    <input type="text" id="userName" placeholder="Full Name" class="form-control">
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <input type="text" id="userEmpNo" placeholder="Employee Number" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <input type="text" id="userName" placeholder="Full Name" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
                 </div>
-                <div class="form-row">
-                    <input type="text" id="userDesignation" placeholder="Designation" class="form-control">
-                    <input type="text" id="userDepartment" placeholder="Department" class="form-control">
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <input type="text" id="userDesignation" placeholder="Designation" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <input type="text" id="userDepartment" placeholder="Department" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
                 </div>
-                <div class="form-row">
-                    <input type="text" id="userSubDepartment" placeholder="Sub Department" class="form-control">
-                    <input type="text" id="userReportsTo" placeholder="Reports To" class="form-control">
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <input type="text" id="userSubDepartment" placeholder="Sub Department" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <input type="text" id="userReportsTo" placeholder="Reports To" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
                 </div>
-                <div class="form-row">
-                    <input type="text" id="userAvatarUrl" placeholder="Avatar URL" class="form-control">
-                    <input type="color" id="userColor" value="#6366f1" style="height:44px; width:44px; border:none; background:none;">
+                <div class="form-row" style="display:grid; grid-template-columns: 1fr 44px; gap:16px; margin-bottom:16px;">
+                    <input type="text" id="userAvatarUrl" placeholder="Avatar URL" class="form-control" style="width:100%; padding:10px; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); color:#fff; border-radius:6px;">
+                    <input type="color" id="userColor" value="#6366f1" style="height:40px; width:44px; border:none; background:none; padding:0;">
                 </div>
-                <div class="btn-group" style="margin-top:20px;">
+                <div class="btn-group" style="display:flex; gap:12px;">
                     <button class="btn primary" onclick="handleUserSubmit()">Save Employee</button>
                     <button class="btn outline" onclick="resetUserForm()">Clear</button>
                 </div>
@@ -230,28 +229,23 @@ function renderSettings(container) {
         <div class="glass-container" style="margin-bottom:24px;">
             <h3>Employee List</h3>
             <div style="overflow-x:auto;">
-                <table style="margin-top:20px;">
+                <table style="width:100%; margin-top:20px;">
                     <thead>
-                        <tr>
-                            <th>No</th>
-                            <th>Name</th>
-                            <th>Designation</th>
-                            <th>Dept</th>
-                            <th>Reports To</th>
-                            <th>Actions</th>
+                        <tr style="text-align:left; color:var(--text-muted); font-size:0.8rem;">
+                            <th>No</th><th>Name</th><th>Designation</th><th>Dept</th><th>Reports To</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${state.employees.map(e => `
-                            <tr>
-                                <td>${e.emp_no || ''}</td>
+                            <tr style="border-bottom:1px solid var(--glass-border);">
+                                <td style="padding:12px 0;">${e.emp_no || ''}</td>
                                 <td>${e.name || ''}</td>
                                 <td>${e.designation || e.role || ''}</td>
                                 <td>${e.department || ''}</td>
                                 <td>${e.reports_to || ''}</td>
                                 <td>
-                                    <button class="btn-text" onclick="editEmployee('${e.id}')">Edit</button>
-                                    <button class="btn-text" style="color:#ef4444" onclick="deleteEmployee('${e.id}')">Del</button>
+                                    <button class="btn-text" style="background:none; border:none; color:var(--accent-primary); cursor:pointer;" onclick="editEmployee('${e.id}')">Edit</button>
+                                    <button class="btn-text" style="background:none; border:none; color:#ef4444; cursor:pointer; margin-left:8px;" onclick="deleteEmployee('${e.id}')">Del</button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -268,28 +262,32 @@ function renderSettings(container) {
 }
 
 async function handleUserSubmit() {
-    const id = document.getElementById('userId').value;
+    const name = document.getElementById('userName').value;
     const userData = {
         emp_no: document.getElementById('userEmpNo').value,
-        name: document.getElementById('userName').value,
+        name: name,
         designation: document.getElementById('userDesignation').value,
         department: document.getElementById('userDepartment').value,
         sub_department: document.getElementById('userSubDepartment').value,
         reports_to: document.getElementById('userReportsTo').value,
         avatar_url: document.getElementById('userAvatarUrl').value,
         color: document.getElementById('userColor').value,
-        avatar: document.getElementById('userName').value.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+        avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     };
 
+    const id = document.getElementById('userId').value;
     try {
         if (id) {
             await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) });
+            showNotification('User updated!', 'success');
         } else {
             await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) });
+            showNotification('User added!', 'success');
         }
         await initializeState();
         renderSettings(document.getElementById('mainContent'));
-    } catch (e) { alert('Failed to save user.'); }
+        checkAuth(); // Refresh sidebar card
+    } catch (e) { showNotification('Failed to save user.', 'error'); }
 }
 
 window.editEmployee = (id) => {
@@ -304,15 +302,17 @@ window.editEmployee = (id) => {
     document.getElementById('userReportsTo').value = emp.reports_to || '';
     document.getElementById('userAvatarUrl').value = emp.avatar_url || '';
     document.getElementById('userColor').value = emp.color || '#6366f1';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 window.deleteEmployee = async (id) => {
     if (!confirm('Delete this employee?')) return;
     try {
         await apiRequest(`/api/employees/${id}`, { method: 'DELETE' });
+        showNotification('User deleted.', 'success');
         await initializeState();
         renderSettings(document.getElementById('mainContent'));
-    } catch (e) { alert('Delete failed.'); }
+    } catch (e) { showNotification('Delete failed.', 'error'); }
 };
 
 window.resetUserForm = () => {
@@ -334,6 +334,12 @@ async function triggerHrDispatchFlow() {
   } catch (e) { alert('Dispatch failed.'); }
 }
 
+function handleLogout() {
+    state.activeProfileId = null;
+    localStorage.removeItem('chronos_user_id');
+    checkAuth();
+}
+
 function setupGlobalEventListeners() {
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', (e) => switchView(e.currentTarget.getAttribute('data-view')));
@@ -346,13 +352,12 @@ function setupGlobalEventListeners() {
             state.activeProfileId = emp.id;
             localStorage.setItem('chronos_user_id', emp.id);
             checkAuth();
-        } else { alert('Invalid Employee Number'); }
+        } else { 
+            const err = document.getElementById('loginError');
+            if (err) err.classList.remove('hidden');
+        }
     });
-    document.getElementById('logoutBtn')?.addEventListener('click', () => {
-        state.activeProfileId = null;
-        localStorage.removeItem('chronos_user_id');
-        checkAuth();
-    });
+    document.getElementById('logoutBtn')?.addEventListener('click', handleLogout);
 }
 
 function setupNetworkMonitoring() {
@@ -366,6 +371,11 @@ function showNotification(msg, type) {
     const n = document.createElement('div');
     n.className = `notification ${type}`;
     n.textContent = msg;
+    n.style.padding = '12px 24px';
+    n.style.background = type === 'success' ? '#10b981' : '#ef4444';
+    n.style.color = '#fff';
+    n.style.borderRadius = '8px';
+    n.style.marginTop = '10px';
     c.appendChild(n);
     setTimeout(() => n.remove(), 3000);
 }

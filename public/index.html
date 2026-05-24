@@ -18,58 +18,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="/styles.css?v=4.0">
+  <link rel="stylesheet" href="/styles.css?v=4.2">
   <style>
     /* Login Overlay Styles */
     #loginOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: var(--bg-base);
-      background-image: var(--bg-gradient);
-      z-index: 9999;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: var(--bg-base); background-image: var(--bg-gradient);
+      z-index: 9999; display: flex; align-items: center; justify-content: center;
     }
-    .login-card {
-      width: 90%;
-      max-width: 400px;
-      padding: 40px;
-      text-align: center;
-      border-radius: var(--radius-lg);
-    }
-    .login-logo {
-      margin-bottom: 24px;
-    }
-    .login-title {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .login-subtitle {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      margin-bottom: 32px;
-    }
-    .hidden {
-      display: none !important;
-    }
+    .login-card { width: 90%; max-width: 400px; padding: 40px; text-align: center; border-radius: var(--radius-lg); }
+    .hidden { display: none !important; }
     
-    /* Table Styles */
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border-color); }
-    th { color: var(--text-muted); font-weight: 500; }
-    
-    /* Settings Form Styles */
-    .settings-form { margin-bottom: 30px; padding: 20px; border-radius: var(--radius-md); background: rgba(255,255,255,0.03); }
-    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
-    .btn-group { display: flex; gap: 10px; }
-    .action-btn { background: none; border: none; cursor: pointer; padding: 5px; color: var(--text-muted); }
-    .action-btn:hover { color: var(--accent-primary); }
-    .delete-btn:hover { color: var(--accent-rose); }
+    /* Profile Card Sidebar */
+    .profile-card {
+      display: flex; align-items: center; gap: 12px; padding: 16px;
+      background: rgba(255,255,255,0.03); border-radius: var(--radius-md);
+      margin-bottom: 24px; border: 1px solid var(--glass-border);
+    }
+    .profile-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; }
+    .profile-info { flex: 1; overflow: hidden; }
+    .profile-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .profile-role { font-size: 0.75rem; color: var(--text-muted); }
   </style>
 </head>
 <body class="dark-theme">
@@ -77,7 +46,7 @@
   <!-- Login Screen -->
   <div id="loginOverlay">
     <div class="login-card glass-container">
-      <div class="login-logo">
+      <div class="login-logo" style="margin-bottom: 24px;">
         <svg class="brand-logo" viewBox="0 0 512 512" width="64" height="64">
           <circle cx="256" cy="256" r="160" fill="none" stroke="url(#loginLogoGrad)" stroke-width="24" />
           <defs>
@@ -88,15 +57,13 @@
           </defs>
         </svg>
       </div>
-      <h2 class="login-title">Welcome Back</h2>
-      <p class="login-subtitle">Enter your employee number to access Chronos Flow.</p>
+      <h2 style="margin-bottom: 8px;">Welcome Back</h2>
+      <p style="color: var(--text-muted); margin-bottom: 32px;">Enter your employee number to access Chronos Flow.</p>
       <form id="loginForm">
-        <div class="form-group">
-          <input type="text" id="loginEmpNo" placeholder="Employee Number (e.g. E001)" required autofocus>
-        </div>
+        <input type="text" id="loginEmpNo" placeholder="Employee Number (e.g. E001)" required style="width: 100%; padding: 12px; margin-bottom: 16px; border-radius: 8px; border: 1px solid var(--glass-border); background: rgba(0,0,0,0.2); color: #fff;">
         <button type="submit" class="btn primary" style="width: 100%; padding: 14px;">Sign In</button>
       </form>
-      <p id="loginError" style="color: var(--accent-rose); font-size: 0.85rem; margin-top: 16px;" class="hidden">Invalid employee number. Please try again.</p>
+      <p id="loginError" style="color: #ef4444; font-size: 0.85rem; margin-top: 16px;" class="hidden">Invalid employee number. Please try again.</p>
     </div>
   </div>
   
@@ -105,43 +72,51 @@
     
     <!-- Sidebar -->
     <aside class="sidebar glass-container">
-      <div class="brand">
+      <div class="brand" style="margin-bottom: 30px;">
         <div class="brand-text">
-          <h1>Chronos</h1>
-          <span class="badge neon-glow-text">Flow</span>
+          <h1>Chronos <span class="badge neon-glow-text" style="font-size: 0.8rem; vertical-align: middle;">Flow</span></h1>
+        </div>
+      </div>
+
+      <!-- Active User Profile Card -->
+      <div class="profile-card" id="activeProfileCard">
+        <div class="profile-avatar" id="activeAvatar" style="background: var(--accent-primary);">--</div>
+        <div class="profile-info">
+          <div class="profile-name" id="activeName">Loading...</div>
+          <div class="profile-role" id="activeRole">---</div>
         </div>
       </div>
 
       <!-- Navigation Links -->
       <nav class="nav-menu">
         <button class="nav-item active" data-view="dashboard">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
           <span>Dashboard</span>
         </button>
         <button class="nav-item" data-view="timer">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Live Timer</span>
         </button>
         <button class="nav-item" data-view="projects">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           <span>Projects</span>
         </button>
         <button class="nav-item" data-view="team">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>Team</span>
         </button>
         <button class="nav-item" data-view="timesheets">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <span>Timesheets</span>
         </button>
         <button class="nav-item" data-view="settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span>Settings</span>
         </button>
       </nav>
 
       <!-- App Status Footer -->
-      <div class="sidebar-footer">
+      <div class="sidebar-footer" style="margin-top: auto;">
         <div class="status-indicator">
           <span class="status-dot online" id="statusDot"></span>
           <span class="status-text" id="statusText">Cloud Synced</span>
@@ -157,13 +132,9 @@
     
   </div>
 
-  <!-- Notification Banner Container -->
   <div class="notification-container" id="notificationContainer"></div>
 
-  <!-- Manual Log Modal (needed for startTimer fallback) -->
-  <div class="modal-overlay" id="manualLogModal" style="display: none;"></div>
-
   <!-- Core Client Application Javascript File -->
-  <script src="/app.js?v=4.1"></script>
+  <script src="/app.js?v=4.2"></script>
 </body>
 </html>

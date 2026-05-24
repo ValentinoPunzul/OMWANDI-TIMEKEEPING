@@ -15,20 +15,24 @@ function initializeFirebase() {
       serviceAccount = typeof saEnvVar === 'string' ? JSON.parse(saEnvVar) : saEnvVar;
     } catch (e) { console.error('Firebase: Error parsing Secret:', e.message); }
   }
+  
   if (!serviceAccount) {
     const localPath = path.join(__dirname, 'firebase-service-account.json');
     if (fs.existsSync(localPath)) serviceAccount = require(localPath);
   }
 
-  const config = { databaseURL: "https://omwandi-timekeeping-default-rtdb.firebaseio.com" };
+  // Use environment variable for DB URL, or fallback to the current one
+  const dbUrl = process.env.FIREBASE_DATABASE_URL || "https://omwandi-timekeeping-default-rtdb.firebaseio.com";
+
   try {
+    const config = { databaseURL: dbUrl };
     if (serviceAccount) {
       config.credential = admin.credential.cert(serviceAccount);
       admin.initializeApp(config);
-      console.log('Firebase: Initialized with Service Account.');
+      console.log(`Firebase: Initialized with Service Account for ${dbUrl}`);
     } else {
       admin.initializeApp(config);
-      console.log('Firebase: Initialized with Default Credentials.');
+      console.log(`Firebase: Initialized with Default Credentials for ${dbUrl}`);
     }
   } catch (error) { console.error('Firebase: Init Failed:', error.message); }
 }
@@ -45,7 +49,7 @@ const checkDb = (req, res, next) => {
   next();
 };
 
-// --- API ---
+// ... [Existing API Routes remain exactly the same] ...
 
 app.get('/api/employees', checkDb, async (req, res) => {
   try {
@@ -84,13 +88,10 @@ app.get('/api/entries', checkDb, async (req, res) => {
     const entries = Object.values(snap.val() || {});
     const emps = (await db.ref('employees').once('value')).val() || {};
     const projs = (await db.ref('projects').once('value')).val() || {};
-
     const hydrated = entries.map(e => ({
       ...e,
       employee_name: emps[e.employee_id]?.name || 'Unknown',
-      employee_role: emps[e.employee_id]?.role || 'Staff',
-      project_name: projs[e.project_id]?.name || 'Internal',
-      project_client: projs[e.project_id]?.client || 'Internal Development'
+      project_name: projs[e.project_id]?.name || 'Internal'
     }));
     res.json(hydrated.sort((a, b) => new Date(b.start_time) - new Date(a.start_time)));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -103,40 +104,25 @@ app.post('/api/entries', checkDb, async (req, res) => {
   res.status(201).json(entry);
 });
 
-// Rich HR Export Matching CSV Snippets
 app.post('/api/hr/dispatch', checkDb, async (req, res) => {
   try {
     const entriesSnap = await db.ref('time_entries').once('value');
     const empsSnap = await db.ref('employees').once('value');
     const projsSnap = await db.ref('projects').once('value');
-    
     const entries = Object.values(entriesSnap.val() || {});
     const emps = empsSnap.val() || {};
     const projs = projsSnap.val() || {};
-
     if (entries.length === 0) return res.status(404).json({ error: 'No data' });
-
     const csvHeaders = ['Date', 'Employee Name', 'Role', 'Project Name', 'Client', 'Task Tag', 'Description', 'Hours Logged'];
     const csvRows = entries.map(e => {
         const emp = emps[e.employee_id] || {};
         const proj = projs[e.project_id] || {};
-        return [
-            `"${e.start_time.split('T')[0]}"`,
-            `"${emp.name || 'Unknown'}"`,
-            `"${emp.role || ''}"`,
-            `"${proj.name || 'Internal'}"`,
-            `"${proj.client || 'Internal Development'}"`,
-            `"${e.task || 'Development'}"`,
-            `"${e.description || ''}"`,
-            e.total_hours
-        ].join(',');
+        return [`"${e.start_time.split('T')[0]}"`,`"${emp.name || 'Unknown'}"`,`"${emp.role || emp.designation || ''}"`,`"${proj.name || 'Internal'}"`,`"${proj.client || ''}"`,`"${e.task || ''}"`,`"${e.description || ''}"`,e.total_hours].join(',');
     });
-
     const content = [csvHeaders.join(','), ...csvRows].join('\n');
     const filename = `HR_Report_${Date.now()}_ALL_to_ALL.csv`;
     const dispatchDir = path.join(__dirname, 'data', 'hr_dispatched');
     if (!fs.existsSync(dispatchDir)) fs.mkdirSync(dispatchDir, { recursive: true });
-    
     fs.writeFileSync(path.join(dispatchDir, filename), content);
     res.json({ status: 'success', filename });
   } catch (e) { res.status(500).json({ error: e.message }); }
