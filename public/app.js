@@ -152,6 +152,10 @@ async function stopUserTimer(id) {
     const rawHours = Math.abs(now - new Date(entry.start_time)) / 36e5;
     const roundedHours = roundToQuarter(rawHours);
     await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: now.toISOString(), total_hours: roundedHours }) });
+    
+    const searchInput = document.getElementById('projectSearch');
+    if (searchInput) searchInput.value = '';
+    
     await initializeState(); 
     switchView(state.activeView);
 }
@@ -179,6 +183,7 @@ function renderTimer(container) {
 
 window.filterTimerProjects = (query) => {
     const select = document.getElementById('timerProjectSelect');
+    if (!select) return;
     const q = query.toLowerCase();
     const filtered = state.projects.filter(p => (p.proj_no && p.proj_no.toLowerCase().includes(q)) || (p.name && p.name.toLowerCase().includes(q)));
     select.innerHTML = '<option value="">-- Select Project --</option>' + filtered.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
@@ -208,9 +213,9 @@ function renderTimesheets(container) {
         const date = e.start_time ? e.start_time.split('T')[0] : 'No Date';
         const startT = e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
         const endT = e.end_time ? new Date(e.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
-        return `<tr><td>${date}</td><td>${e.employee_name}</td><td>${e.project_name}</td><td>${startT} - ${endT}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
+        return `<tr><td>${date}</td><td>${e.employee_name}</td><td>${e.project_name}</td><td>${startT}</td><td>${endT}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
     }).join('');
-    container.innerHTML = `<h2>Timesheets</h2><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Start - End</th><th>Hours</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    container.innerHTML = `<h2>Timesheets</h2><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Start</th><th>End</th><th>Hours</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderSettings(container) {
@@ -253,7 +258,7 @@ function renderSettings(container) {
                     <div><label style="font-size:0.7rem; opacity:0.7;">DESIGNATION</label><input type="text" id="userDesignation" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">DEPT</label><input type="text" id="userDepartment" class="form-control"></div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">ACCESS ROLE</label>
                         <select id="userAccessRole" class="form-control"><option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option></select>
                     </div>
@@ -290,7 +295,6 @@ function renderSettings(container) {
     `;
 }
 
-// Logic...
 async function saveMapping() {
     const data = { proj_no: document.getElementById('mapProjNo').value, name: document.getElementById('mapName').value, client: document.getElementById('mapClient').value, vessel_name: document.getElementById('mapVessel').value };
     await apiRequest('/api/settings/mapping', { method: 'POST', body: JSON.stringify(data) });
