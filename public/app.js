@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CHRONOS FLOW - BUG FIX ACTIVE SESSIONS CLIENT
+   CHRONOS FLOW - FINAL POLISHED ACTIVE SESSIONS CLIENT
    ========================================================================== */
 
 const state = {
@@ -9,8 +9,6 @@ const state = {
   activeProfileId: localStorage.getItem('chronos_user_id') || null, 
   activeView: 'dashboard',
   isOnline: navigator.onLine,
-  employeeSortField: 'name',
-  employeeSortDir: 'asc',
   userRole: 'Employee',
   scoroMapping: {}
 };
@@ -23,6 +21,7 @@ window.addEventListener('DOMContentLoaded', () => {
     setupGlobalEventListeners();
     checkAuth();
     startDashboardClock();
+    startDataRefresh();
   });
 });
 
@@ -71,6 +70,16 @@ async function initializeState() {
   } catch (e) { console.error('Init Error:', e); }
 }
 
+function startDataRefresh() {
+    setInterval(async () => {
+        await initializeState();
+        if (state.activeView === 'dashboard') {
+            const container = document.getElementById('mainContent');
+            if (container) renderDashboard(container);
+        }
+    }, 60000);
+}
+
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const defaultHeaders = { 'Content-Type': 'application/json' };
@@ -107,50 +116,63 @@ function switchView(viewName) {
 }
 
 function renderDashboard(container) {
-    const activeTimers = state.timeEntries.filter(e => e.total_hours === 0 || !e.end_time);
+    const activeTimers = state.timeEntries.filter(e => (e.total_hours === 0 || !e.end_time) && e.start_time);
     const grouped = {};
     activeTimers.forEach(timer => { if (!grouped[timer.project_id]) grouped[timer.project_id] = []; grouped[timer.project_id].push(timer); });
-    let html = activeTimers.length === 0 ? '<div style="text-align:center; padding:40px;">No active sessions.</div>' : 
+    let html = activeTimers.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--text-muted);">No active sessions.</div>' : 
         Object.entries(grouped).map(([pid, timers]) => {
             const proj = state.projects.find(p => p.id === pid) || { name: 'Internal', color: '#6366f1' };
             const list = timers.map(t => {
                 const emp = state.employees.find(e => e.id === t.employee_id) || { name: 'Unknown', avatar: '??', color: '#888' };
-                return `<div class="timer-card glass-panel"><div class="timer-avatar" style="background:${emp.color}">${emp.avatar}</div><div class="timer-user-info"><div>${emp.name}</div><div style="font-size:0.8rem; opacity:0.7;">${emp.designation || ''}</div></div><button class="btn-text" style="color:#ef4444;" onclick="stopUserTimer('${t.id}')">STOP</button></div>`;
+                const diff = Math.floor((new Date() - new Date(t.start_time)) / 1000);
+                const h = Math.floor(diff / 3600).toString().padStart(2, '0');
+                const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+                const s = (diff % 60).toString().padStart(2, '0');
+                return `<div class="timer-card glass-panel">
+                    <div class="timer-avatar" style="background:${emp.color}">${emp.avatar}</div>
+                    <div class="timer-user-info"><div>${emp.name}</div><div style="font-size:0.8rem; opacity:0.7;">${emp.designation || ''}</div></div>
+                    <div class="timer-counter" style="margin-right:15px; font-family:monospace;">${h}:${m}:${s}</div>
+                    <button class="btn-text" style="color:#ef4444; font-weight:800;" onclick="stopUserTimer('${t.id}')">STOP</button>
+                </div>`;
             }).join('');
             return `<div class="project-group"><h3>[${proj.proj_no || '---'}] ${proj.name}</h3>${list}</div>`;
         }).join('');
     container.innerHTML = `<div class="clock-card glass-container"><div class="dashboard-time" id="dashboardTime">00:00:00</div></div><div class="active-timers-section">${html}</div>`;
 }
 
+function roundToQuarter(hours) {
+    return Math.floor(hours * 4) / 4;
+}
+
 async function stopUserTimer(id) {
     if (!confirm('Stop tracking?')) return;
     const entry = state.timeEntries.find(e => e.id === id);
-    const hours = Math.abs(new Date() - new Date(entry.start_time)) / 36e5;
-    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: new Date().toISOString(), total_hours: Math.floor(hours * 4) / 4 }) });
-    
-    // Clear the selection fields
-    const searchInput = document.getElementById('projectSearch');
-    const selectBox = document.getElementById('timerProjectSelect');
-    if (searchInput) searchInput.value = '';
-    
+    if (!entry) return;
+    const now = new Date();
+    const rawHours = Math.abs(now - new Date(entry.start_time)) / 36e5;
+    const roundedHours = roundToQuarter(rawHours);
+    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: now.toISOString(), total_hours: roundedHours }) });
     await initializeState(); 
     switchView(state.activeView);
 }
 
 function renderTimer(container) {
-    const projects = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
+    const myActiveEntry = state.timeEntries.find(e => e.employee_id === state.activeProfileId && (e.total_hours === 0 || !e.end_time));
+    const projects = state.projects.map(p => `<option value="${p.id}" ${myActiveEntry?.project_id === p.id ? 'selected' : ''}>${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
+    let actionBtn = myActiveEntry ? `<button class="btn" style="width:100%; padding:20px; background:#ef4444; color:#fff; font-size:1.2rem; font-weight:800; border-radius:12px;" onclick="stopUserTimer('${myActiveEntry.id}')">STOP SESSION</button>` : `<button class="btn primary" style="width:100%; padding:20px; font-size:1.2rem; font-weight:800; border-radius:12px;" onclick="startTimer()">START SESSION</button>`;
+    const employeeHeader = state.userRole === 'Employee' ? `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;"><div><h1 style="margin:0; font-size:1.2rem;">Chronos <span style="color:var(--accent-primary)">Flow</span></h1><p style="margin:0; font-size:0.75rem; color:var(--text-muted);">${state.employees.find(e => e.id === state.activeProfileId)?.name}</p></div><button class="btn outline" style="padding:6px 12px; font-size:0.75rem;" onclick="handleLogout()">Logout</button></div>` : '<div class="view-header"><h2>Live Tracker</h2></div>';
+    
     container.innerHTML = `
+        ${employeeHeader}
         <div class="timer-view-container glass-container">
-            <div id="faceClock" style="font-size:4rem; font-weight:800; margin-bottom:20px;">00:00:00</div>
+            <div id="faceClock" style="font-size:4rem; font-weight:800; margin-bottom:10px; font-family:monospace;">00:00:00</div>
+            <div style="margin-bottom:20px; display:flex; align-items:center; justify-content:center; gap:8px;">${myActiveEntry ? '<span class="pulse-emerald" style="width:10px; height:10px;"></span> <span style="color:#10b981; font-weight:700; font-size:0.8rem; letter-spacing:1px;">LIVE SESSION ACTIVE</span>' : '<span style="color:var(--text-muted); font-size:0.8rem;">READY TO TRACK</span>'}</div>
             <div style="text-align:left; margin-bottom:20px;">
-                <label style="font-size:0.7rem; opacity:0.7;">SEARCH PROJECT NUMBER / NAME</label>
-                <input type="text" id="projectSearch" class="form-control" style="margin-bottom:12px;" placeholder="Type here..." oninput="window.filterTimerProjects(this.value)">
-                <select id="timerProjectSelect" class="form-control">
-                    <option value="">-- Select Project --</option>
-                    ${projects}
-                </select>
+                <label style="font-size:0.7rem; opacity:0.7;">SEARCH PROJECT</label>
+                <input type="text" id="projectSearch" class="form-control" style="margin-bottom:12px;" placeholder="Project # or Name..." oninput="window.filterTimerProjects(this.value)" ${myActiveEntry ? 'disabled' : ''}>
+                <select id="timerProjectSelect" class="form-control" ${myActiveEntry ? 'disabled' : ''}><option value="">-- Select Project --</option>${projects}</select>
             </div>
-            <button class="btn primary" style="width:100%;" onclick="startTimer()">START SESSION</button>
+            ${actionBtn}
         </div>
     `;
 }
@@ -164,17 +186,15 @@ window.filterTimerProjects = (query) => {
 
 async function startTimer() {
     const active = state.timeEntries.find(e => e.employee_id === state.activeProfileId && (!e.end_time || e.total_hours === 0));
-    if (active) return alert('You already have an active timer running. Please stop it before starting a new one.');
-
+    if (active) return alert('Session already active.');
     const pid = document.getElementById('timerProjectSelect').value;
-    if (!pid) return alert('Please select a project first.');
-    
+    if (!pid) return alert('Select project.');
     await apiRequest('/api/entries', { method: 'POST', body: JSON.stringify({ employee_id: state.activeProfileId, project_id: pid, start_time: new Date().toISOString(), total_hours: 0 }) });
     await initializeState(); switchView('dashboard');
 }
 
 function renderProjects(container) {
-    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:10px;"><h3>[${p.proj_no || '---'}] ${p.name}</h3><p>Client: ${p.client}</p><p style="opacity:0.7">Vessel: ${p.vessel_name || 'N/A'}</p></div>`).join('');
+    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:10px;"><h3>[${p.proj_no || '---'}] ${p.name}</h3><p style="opacity:0.7">Vessel: ${p.vessel_name || 'N/A'}</p></div>`).join('');
     container.innerHTML = `<h2>Projects</h2>${html}`;
 }
 
@@ -186,17 +206,17 @@ function renderTeam(container) {
 function renderTimesheets(container) {
     const rows = state.timeEntries.map(e => {
         const date = e.start_time ? e.start_time.split('T')[0] : 'No Date';
-        return `<tr><td>${date}</td><td>${e.employee_name || '---'}</td><td>${e.project_name || '---'}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
+        const startT = e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+        const endT = e.end_time ? new Date(e.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
+        return `<tr><td>${date}</td><td>${e.employee_name}</td><td>${e.project_name}</td><td>${startT} - ${endT}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
     }).join('');
-    container.innerHTML = `<h2>Timesheets</h2><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Hours</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    container.innerHTML = `<h2>Timesheets</h2><div class="glass-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Start - End</th><th>Hours</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
     if (!isAdmin && state.userRole !== 'Editor') { container.innerHTML = 'Access Denied'; return; }
-
-    const sortedEmployees = [...state.employees].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    const userOptions = sortedEmployees.map(e => `<option value="${e.id}">${e.name} (${e.emp_no || '---'})</option>`).join('');
+    const userOptions = state.employees.sort((a,b) => a.name.localeCompare(b.name)).map(e => `<option value="${e.id}">${e.name}</option>`).join('');
     const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
 
     container.innerHTML = `
@@ -220,76 +240,62 @@ function renderSettings(container) {
 
         <div class="glass-container" style="margin-bottom:24px;">
             <h3>User Management</h3>
-            <div style="margin-top:20px;">
-                <label style="font-size:0.7rem; opacity:0.7; text-transform:uppercase;">Select Employee to Edit</label>
-                <select id="userSelect" class="form-control" style="margin-bottom:20px;" onchange="editEmployee(this.value)">
-                    <option value="">-- Add New Employee --</option>${userOptions}
-                </select>
-            </div>
+            <select id="userSelect" class="form-control" style="margin:20px 0;" onchange="editEmployee(this.value)">
+                <option value="">-- Add New Employee --</option>${userOptions}
+            </select>
             <div id="userForm" class="settings-form">
                 <input type="hidden" id="userId">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="font-size:0.7rem; opacity:0.7;">EMPLOYEE NUMBER</label><input type="text" id="userEmpNo" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">EMP NO</label><input type="text" id="userEmpNo" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">FULL NAME</label><input type="text" id="userName" class="form-control"></div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">DESIGNATION</label><input type="text" id="userDesignation" class="form-control"></div>
-                    <div><label style="font-size:0.7rem; opacity:0.7;">DEPARTMENT</label><input type="text" id="userDepartment" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">DEPT</label><input type="text" id="userDepartment" class="form-control"></div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="font-size:0.7rem; opacity:0.7;">SUB DEPARTMENT</label><input type="text" id="userSubDepartment" class="form-control"></div>
-                    <div><label style="font-size:0.7rem; opacity:0.7;">REPORTS TO</label><input type="text" id="userReportsTo" class="form-control"></div>
-                </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">ACCESS ROLE</label>
-                        <select id="userAccessRole" class="form-control">
-                            <option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option>
-                        </select>
+                        <select id="userAccessRole" class="form-control"><option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option></select>
                     </div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">COLOR</label><input type="color" id="userColor" value="#6366f1" style="height:44px; width:100%; border:none; background:none; padding:0; cursor:pointer;"></div>
                 </div>
                 <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;">
                     <button class="btn primary" onclick="handleUserSubmit()">Save Employee</button>
-                    ${isAdmin ? `<button id="deleteEmployeeBtn" class="btn outline" style="color:#ef4444; border-color:#ef4444; display:none;" onclick="deleteEmployee()">Delete Employee</button>` : ''}
-                    <button class="btn outline" onclick="resetUserForm()">Clear</button>
+                    ${isAdmin ? `<button id="deleteEmployeeBtn" class="btn outline" style="color:#ef4444; display:none;" onclick="deleteEmployee()">Delete</button>` : ''}
                 </div>
             </div>
         </div>
 
         <div class="glass-container">
             <h3>Project Management</h3>
-            <div style="margin-top:20px;">
-                <label style="font-size:0.7rem; opacity:0.7; text-transform:uppercase;">Select Project to Edit</label>
-                <select id="projectSelect" class="form-control" style="margin-bottom:20px;" onchange="handleProjectSelect(this.value)">
-                    <option value="">-- Add New Project --</option>${projectOptions}
-                </select>
-            </div>
+            <select id="projectSelect" class="form-control" style="margin:20px 0;" onchange="handleProjectSelect(this.value)">
+                <option value="">-- Add New Project --</option>${projectOptions}
+            </select>
             <div id="projectForm" class="settings-form">
                 <input type="hidden" id="projectId">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NUMBER</label><input type="text" id="projectNo" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NO</label><input type="text" id="projectNo" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NAME</label><input type="text" id="projectName" class="form-control"></div>
                 </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <div><label style="font-size:0.7rem; opacity:0.7;">CLIENT NAME</label><input type="text" id="projectClient" class="form-control"></div>
-                    <div><label style="font-size:0.7rem; opacity:0.7;">VESSEL NAME</label><input type="text" id="projectVessel" class="form-control"></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">CLIENT</label><input type="text" id="projectClient" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">VESSEL</label><input type="text" id="projectVessel" class="form-control"></div>
                 </div>
                 <div class="btn-group" style="display:flex; gap:12px; margin-top:10px;">
                     <button class="btn primary" onclick="handleProjectSubmit()">Save Project</button>
-                    ${isAdmin ? `<button id="deleteProjectBtn" class="btn outline" style="color:#ef4444; border-color:#ef4444; display:none;" onclick="deleteProject()">Delete Project</button>` : ''}
-                    <button class="btn outline" onclick="resetProjectForm()">Clear</button>
+                    ${isAdmin ? `<button id="deleteProjectBtn" class="btn outline" style="color:#ef4444; display:none;" onclick="deleteProject()">Delete</button>` : ''}
                 </div>
             </div>
         </div>
     `;
 }
 
+// Logic...
 async function saveMapping() {
     const data = { proj_no: document.getElementById('mapProjNo').value, name: document.getElementById('mapName').value, client: document.getElementById('mapClient').value, vessel_name: document.getElementById('mapVessel').value };
     await apiRequest('/api/settings/mapping', { method: 'POST', body: JSON.stringify(data) });
     showNotification('Mapping saved!', 'success');
 }
-
 async function viewLatestWebhook() {
     const logs = await apiRequest('/api/admin/webhooks');
     if (logs.length > 0) {
@@ -297,62 +303,36 @@ async function viewLatestWebhook() {
         win.document.body.innerHTML = `<pre style="background:#222; color:#0f0; padding:20px;">${JSON.stringify(logs[0].content, null, 2)}</pre>`;
     } else { alert('No logs found.'); }
 }
-
 async function handleUserSubmit() {
     const name = document.getElementById('userName').value;
     if(!name) return alert('Name required');
-    const userData = {
-        emp_no: document.getElementById('userEmpNo').value,
-        name,
-        designation: document.getElementById('userDesignation').value,
-        department: document.getElementById('userDepartment').value,
-        sub_department: document.getElementById('userSubDepartment').value,
-        reports_to: document.getElementById('userReportsTo').value,
-        access_role: document.getElementById('userAccessRole').value,
-        color: document.getElementById('userColor').value,
-        avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    };
+    const userData = { emp_no: document.getElementById('userEmpNo').value, name, designation: document.getElementById('userDesignation').value, department: document.getElementById('userDepartment').value, access_role: document.getElementById('userAccessRole').value, color: document.getElementById('userColor').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) };
     const id = document.getElementById('userId').value;
     if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) });
     else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) });
     await initializeState(); renderSettings(document.getElementById('mainContent'));
 }
-
 function editEmployee(id) {
     const emp = state.employees.find(e => e.id === id);
-    if (!emp) { resetUserForm(); return; }
+    if (!emp) return;
     document.getElementById('userId').value = emp.id;
     document.getElementById('userEmpNo').value = emp.emp_no || '';
     document.getElementById('userName').value = emp.name || '';
     document.getElementById('userDesignation').value = emp.designation || '';
     document.getElementById('userDepartment').value = emp.department || '';
-    document.getElementById('userSubDepartment').value = emp.sub_department || '';
-    document.getElementById('userReportsTo').value = emp.reports_to || '';
     document.getElementById('userAccessRole').value = emp.access_role || 'Employee';
-    document.getElementById('userColor').value = emp.color || '#6366f1';
     const delBtn = document.getElementById('deleteEmployeeBtn');
     if (delBtn) delBtn.style.display = 'inline-block';
 }
-
 async function deleteEmployee() {
     const id = document.getElementById('userId').value;
     if (!id || !confirm('Delete employee?')) return;
     await apiRequest(`/api/employees/${id}`, { method: 'DELETE' });
     await initializeState(); renderSettings(document.getElementById('mainContent'));
 }
-
-function resetUserForm() {
-    document.getElementById('userId').value = '';
-    const form = document.getElementById('userForm');
-    if (form) form.reset();
-    document.getElementById('userSelect').value = '';
-    const delBtn = document.getElementById('deleteEmployeeBtn');
-    if (delBtn) delBtn.style.display = 'none';
-}
-
 function handleProjectSelect(id) {
     const p = state.projects.find(p => p.id === id);
-    if (!p) { resetProjectForm(); return; }
+    if (!p) return;
     document.getElementById('projectId').value = p.id;
     document.getElementById('projectNo').value = p.proj_no || '';
     document.getElementById('projectName').value = p.name || '';
@@ -361,7 +341,6 @@ function handleProjectSelect(id) {
     const delBtn = document.getElementById('deleteProjectBtn');
     if (delBtn) delBtn.style.display = 'inline-block';
 }
-
 async function handleProjectSubmit() {
     const projNo = document.getElementById('projectNo').value;
     const name = document.getElementById('projectName').value;
@@ -372,23 +351,12 @@ async function handleProjectSubmit() {
     else await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(data) });
     await initializeState(); renderSettings(document.getElementById('mainContent'));
 }
-
 async function deleteProject() {
     const id = document.getElementById('projectId').value;
     if (!id || !confirm('Delete project?')) return;
     await apiRequest(`/api/projects/${id}`, { method: 'DELETE' });
     await initializeState(); renderSettings(document.getElementById('mainContent'));
 }
-
-function resetProjectForm() {
-    document.getElementById('projectId').value = '';
-    const form = document.getElementById('projectForm');
-    if (form) form.reset();
-    document.getElementById('projectSelect').value = '';
-    const delBtn = document.getElementById('deleteProjectBtn');
-    if (delBtn) delBtn.style.display = 'none';
-}
-
 function handleLogout() { state.activeProfileId = null; localStorage.removeItem('chronos_user_id'); location.reload(); }
 function setupGlobalEventListeners() {
     document.querySelectorAll('.nav-item').forEach(item => { item.addEventListener('click', (e) => switchView(e.currentTarget.getAttribute('data-view'))); });
