@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CHRONOS FLOW - ADVANCED DASHBOARD CLIENT WITH SCORO MAPPER
+   CHRONOS FLOW - ADVANCED DASHBOARD CLIENT WITH FULL MANAGEMENT & SCORO
    ========================================================================== */
 
 const state = {
@@ -9,6 +9,8 @@ const state = {
   activeProfileId: localStorage.getItem('chronos_user_id') || null, 
   activeView: 'dashboard',
   isOnline: navigator.onLine,
+  employeeSortField: 'name',
+  employeeSortDir: 'asc',
   userRole: 'Employee',
   scoroMapping: {}
 };
@@ -115,7 +117,7 @@ function renderDashboard(container) {
                 const emp = state.employees.find(e => e.id === t.employee_id) || { name: 'Unknown', avatar: '??', color: '#888' };
                 return `<div class="timer-card glass-panel"><div class="timer-avatar" style="background:${emp.color}">${emp.avatar}</div><div class="timer-user-info"><div>${emp.name}</div><div style="font-size:0.8rem; opacity:0.7;">${emp.designation || ''}</div></div><button class="btn-text" style="color:#ef4444;" onclick="stopUserTimer('${t.id}')">STOP</button></div>`;
             }).join('');
-            return `<div class="project-group"><h3>${proj.name}</h3>${list}</div>`;
+            return `<div class="project-group"><h3>[${proj.proj_no || '---'}] ${proj.name}</h3>${list}</div>`;
         }).join('');
     container.innerHTML = `<div class="clock-card glass-container"><div class="dashboard-time" id="dashboardTime">00:00:00</div></div><div class="active-timers-section">${html}</div>`;
 }
@@ -129,7 +131,7 @@ async function stopUserTimer(id) {
 }
 
 function renderTimer(container) {
-    const projects = state.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const projects = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
     container.innerHTML = `<div class="timer-view-container glass-container"><div id="faceClock" style="font-size:4rem; font-weight:800; margin-bottom:20px;">00:00:00</div><select id="timerProjectSelect" class="form-control" style="margin-bottom:20px;">${projects}</select><button class="btn primary" style="width:100%;" onclick="startTimer()">START SESSION</button></div>`;
 }
 
@@ -140,7 +142,7 @@ async function startTimer() {
 }
 
 function renderProjects(container) {
-    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:10px;"><h3>${p.name}</h3><p>Client: ${p.client}</p></div>`).join('');
+    const html = state.projects.map(p => `<div class="glass-container" style="margin-bottom:10px;"><h3>[${p.proj_no || '---'}] ${p.name}</h3><p>Client: ${p.client}</p><p style="opacity:0.7">Vessel: ${p.vessel_name || 'N/A'}</p></div>`).join('');
     container.innerHTML = `<h2>Projects</h2>${html}`;
 }
 
@@ -158,18 +160,17 @@ function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
     if (!isAdmin && state.userRole !== 'Editor') { container.innerHTML = 'Access Denied'; return; }
 
-    const userOptions = state.employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
-    const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const sortedEmployees = [...state.employees].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const userOptions = sortedEmployees.map(e => `<option value="${e.id}">${e.name} (${e.emp_no || '---'})</option>`).join('');
+    const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
 
     container.innerHTML = `
         <div class="view-header"><h2>Settings</h2></div>
         
-        <!-- SCORO MAPPER (New) -->
+        <!-- SCORO MAPPER -->
         <div class="glass-container" style="margin-bottom:24px; border-left: 4px solid #8b5cf6;">
             <h3>SCORO Webhook Mapper</h3>
-            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:20px;">Map SCORO JSON paths to App fields. Use 'entity.no' for standard fields or 'cf:c_vesselname' for custom fields.</p>
-            
-            <div id="mappingForm" class="settings-form">
+            <div id="mappingForm" class="settings-form" style="margin-top:20px;">
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NUMBER PATH</label><input type="text" id="mapProjNo" value="${state.scoroMapping.proj_no || 'entity.no'}" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NAME PATH</label><input type="text" id="mapName" value="${state.scoroMapping.name || 'entity.project_name'}" class="form-control"></div>
@@ -178,52 +179,75 @@ function renderSettings(container) {
                     <div><label style="font-size:0.7rem; opacity:0.7;">CLIENT NAME PATH</label><input type="text" id="mapClient" value="${state.scoroMapping.client || 'entity.company_name'}" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">VESSEL NAME PATH</label><input type="text" id="mapVessel" value="${state.scoroMapping.vessel_name || 'cf:c_vesselname'}" class="form-control"></div>
                 </div>
-                <button class="btn primary" onclick="saveMapping()">Save Mapping Configuration</button>
-                <button class="btn outline" style="margin-left:10px;" onclick="viewLatestWebhook()">View Latest Webhook JSON</button>
+                <button class="btn primary" onclick="saveMapping()">Save Mapping</button>
+                <button class="btn outline" style="margin-left:10px;" onclick="viewLatestWebhook()">View JSON</button>
             </div>
         </div>
 
-        <!-- Existing Employee Management -->
+        <!-- EMPLOYEE MANAGEMENT (RESTORING ALL FIELDS) -->
         <div class="glass-container" style="margin-bottom:24px;">
-            <h3>Employee Management</h3>
-            <select id="userSelect" class="form-control" style="margin:20px 0;" onchange="editEmployee(this.value)">
-                <option value="">-- Add New Employee --</option>${userOptions}
-            </select>
+            <h3>User Management</h3>
+            <div style="margin-top:20px;">
+                <label style="font-size:0.7rem; opacity:0.7; text-transform:uppercase;">Select Employee to Edit</label>
+                <select id="userSelect" class="form-control" style="margin-bottom:20px;" onchange="editEmployee(this.value)">
+                    <option value="">-- Add New Employee --</option>${userOptions}
+                </select>
+            </div>
             <div id="userForm" class="settings-form">
                 <input type="hidden" id="userId">
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userEmpNo" placeholder="Emp No" class="form-control">
-                    <input type="text" id="userName" placeholder="Full Name" class="form-control">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">EMPLOYEE NUMBER</label><input type="text" id="userEmpNo" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">FULL NAME</label><input type="text" id="userName" class="form-control"></div>
                 </div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
-                    <input type="text" id="userDesignation" placeholder="Designation" class="form-control">
-                    <select id="userAccessRole" class="form-control"><option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option></select>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">DESIGNATION</label><input type="text" id="userDesignation" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">DEPARTMENT</label><input type="text" id="userDepartment" class="form-control"></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">SUB DEPARTMENT</label><input type="text" id="userSubDepartment" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">REPORTS TO</label><input type="text" id="userReportsTo" class="form-control"></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">ACCESS ROLE</label>
+                        <select id="userAccessRole" class="form-control">
+                            <option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option>
+                        </select>
+                    </div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">COLOR</label><input type="color" id="userColor" value="#6366f1" style="height:44px; width:100%; border:none; background:none; padding:0; cursor:pointer;"></div>
                 </div>
                 <button class="btn primary" onclick="handleUserSubmit()">Save Employee</button>
             </div>
         </div>
 
+        <!-- PROJECT MANAGEMENT (RESTORING ALL FIELDS) -->
         <div class="glass-container">
             <h3>Project Management</h3>
-            <select id="projectSelect" class="form-control" style="margin:20px 0;" onchange="handleProjectSelect(this.value)">
-                <option value="">-- Add New Project --</option>${projectOptions}
-            </select>
+            <div style="margin-top:20px;">
+                <label style="font-size:0.7rem; opacity:0.7; text-transform:uppercase;">Select Project to Edit</label>
+                <select id="projectSelect" class="form-control" style="margin-bottom:20px;" onchange="handleProjectSelect(this.value)">
+                    <option value="">-- Add New Project --</option>${projectOptions}
+                </select>
+            </div>
             <div id="projectForm" class="settings-form">
                 <input type="hidden" id="projectId">
-                <input type="text" id="projectName" placeholder="Project Name" class="form-control" style="margin-bottom:16px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NUMBER</label><input type="text" id="projectNo" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NAME</label><input type="text" id="projectName" class="form-control"></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                    <div><label style="font-size:0.7rem; opacity:0.7;">CLIENT NAME</label><input type="text" id="projectClient" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">VESSEL NAME</label><input type="text" id="projectVessel" class="form-control"></div>
+                </div>
                 <button class="btn primary" onclick="handleProjectSubmit()">Save Project</button>
             </div>
         </div>
     `;
 }
 
+// --- LOGIC ---
+
 async function saveMapping() {
-    const data = {
-        proj_no: document.getElementById('mapProjNo').value,
-        name: document.getElementById('mapName').value,
-        client: document.getElementById('mapClient').value,
-        vessel_name: document.getElementById('mapVessel').value
-    };
+    const data = { proj_no: document.getElementById('mapProjNo').value, name: document.getElementById('mapName').value, client: document.getElementById('mapClient').value, vessel_name: document.getElementById('mapVessel').value };
     await apiRequest('/api/settings/mapping', { method: 'POST', body: JSON.stringify(data) });
     showNotification('Mapping saved!', 'success');
 }
@@ -236,10 +260,20 @@ async function viewLatestWebhook() {
     } else { alert('No logs found.'); }
 }
 
-// Reuse existing handleUserSubmit, handleProjectSubmit, etc.
 async function handleUserSubmit() {
     const name = document.getElementById('userName').value;
-    const userData = { emp_no: document.getElementById('userEmpNo').value, name, designation: document.getElementById('userDesignation').value, access_role: document.getElementById('userAccessRole').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) };
+    if(!name) return alert('Name required');
+    const userData = {
+        emp_no: document.getElementById('userEmpNo').value,
+        name,
+        designation: document.getElementById('userDesignation').value,
+        department: document.getElementById('userDepartment').value,
+        sub_department: document.getElementById('userSubDepartment').value,
+        reports_to: document.getElementById('userReportsTo').value,
+        access_role: document.getElementById('userAccessRole').value,
+        color: document.getElementById('userColor').value,
+        avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    };
     const id = document.getElementById('userId').value;
     if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) });
     else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) });
@@ -253,21 +287,31 @@ function editEmployee(id) {
     document.getElementById('userEmpNo').value = emp.emp_no || '';
     document.getElementById('userName').value = emp.name || '';
     document.getElementById('userDesignation').value = emp.designation || '';
+    document.getElementById('userDepartment').value = emp.department || '';
+    document.getElementById('userSubDepartment').value = emp.sub_department || '';
+    document.getElementById('userReportsTo').value = emp.reports_to || '';
     document.getElementById('userAccessRole').value = emp.access_role || 'Employee';
+    document.getElementById('userColor').value = emp.color || '#6366f1';
 }
 
 function handleProjectSelect(id) {
-    const proj = state.projects.find(p => p.id === id);
-    if (!proj) return;
-    document.getElementById('projectId').value = proj.id;
-    document.getElementById('projectName').value = proj.name;
+    const p = state.projects.find(p => p.id === id);
+    if (!p) return;
+    document.getElementById('projectId').value = p.id;
+    document.getElementById('projectNo').value = p.proj_no || '';
+    document.getElementById('projectName').value = p.name || '';
+    document.getElementById('projectClient').value = p.client || '';
+    document.getElementById('projectVessel').value = p.vessel_name || '';
 }
 
 async function handleProjectSubmit() {
+    const projNo = document.getElementById('projectNo').value;
     const name = document.getElementById('projectName').value;
-    const id = document.getElementById('projectId').value;
-    if (id) await apiRequest(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify({ name }) });
-    else await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify({ name }) });
+    if(!projNo || !name) return alert('No & Name required');
+    const data = { proj_no: projNo, name, client: document.getElementById('projectClient').value, vessel_name: document.getElementById('projectVessel').value, id: 'proj_'+projNo };
+    const id = document.getElementById('projectId').value || data.id;
+    if (document.getElementById('projectId').value) await apiRequest(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+    else await apiRequest('/api/projects', { method: 'POST', body: JSON.stringify(data) });
     await initializeState(); renderSettings(document.getElementById('mainContent'));
 }
 
@@ -276,8 +320,7 @@ function setupGlobalEventListeners() {
     document.querySelectorAll('.nav-item').forEach(item => { item.addEventListener('click', (e) => switchView(e.currentTarget.getAttribute('data-view'))); });
     document.getElementById('loginForm')?.addEventListener('submit', (e) => {
         e.preventDefault();
-        const empNo = document.getElementById('loginEmpNo').value;
-        const emp = state.employees.find(e => e.emp_no === empNo);
+        const emp = state.employees.find(e => e.emp_no === document.getElementById('loginEmpNo').value);
         if (emp) { state.activeProfileId = emp.id; localStorage.setItem('chronos_user_id', emp.id); checkAuth(); }
         else { document.getElementById('loginError').classList.remove('hidden'); }
     });
