@@ -41,44 +41,42 @@ const checkDb = (req, res, next) => {
 };
 
 // ============================================
-// SCORO WEBHOOK INTEGRATION
+// SCORO WEBHOOK HANDLER (Refined)
 // ============================================
 app.post('/api/webhooks/scoro', checkDb, async (req, res) => {
   try {
-    const scoroData = req.body;
-    console.log('Received SCORO Webhook:', JSON.stringify(scoroData));
-
-    /**
-     * SCORO payload mapping (Adjust based on your specific SCORO setup)
-     * Assuming standard SCORO project fields
-     */
-    const projectNumber = scoroData.project_number || scoroData.project_id || Date.now();
-    const projectName = scoroData.project_name || scoroData.name || 'New Scoro Project';
-    const clientName = scoroData.company_name || scoroData.client_name || 'SCORO Client';
-
-    const projectId = 'proj_' + projectNumber;
-    const newProject = {
-      id: projectId,
-      proj_no: projectNumber.toString(),
-      name: projectName,
-      client: clientName,
-      vessel_name: scoroData.vessel_name || 'N/A', // Custom field if you have it in SCORO
-      color: '#8b5cf6', // Default purple for auto-imported projects
-      imported_from: 'SCORO'
+    const scoro = req.body;
+    // Map SCORO fields to Chronos Flow fields
+    // SCORO usually sends 'project_id', 'project_name', and 'company_name'
+    const projNo = scoro.project_number || scoro.project_id || Date.now();
+    const projName = scoro.project_name || scoro.name || 'Untitled SCORO Project';
+    const client = scoro.company_name || scoro.client_name || 'Imported Client';
+    
+    const id = 'proj_' + projNo;
+    const projectData = {
+      id: id,
+      proj_no: projNo.toString(),
+      name: projName,
+      client: client,
+      vessel_name: scoro.vessel_name || 'N/A',
+      color: '#8b5cf6', // Default SCORO Purple
+      last_sync: new Date().toISOString(),
+      source: 'SCORO'
     };
 
-    await db.ref('projects/' + projectId).set(newProject);
-    console.log(`Successfully imported SCORO project: ${projectName} (${projectNumber})`);
+    // This will 'Create' or 'Update' existing project automatically
+    await db.ref('projects/' + id).update(projectData);
     
-    res.status(200).json({ status: 'success', message: 'Project imported' });
+    console.log(`SCORO Sync Success: ${projName} (${projNo})`);
+    res.status(200).json({ status: 'success' });
   } catch (error) {
-    console.error('Webhook Error:', error.message);
-    res.status(500).json({ status: 'error', message: error.message });
+    console.error('SCORO Webhook Error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // ============================================
-// STANDARD API ROUTES
+// STANDARD API ROUTES (Existing)
 // ============================================
 
 app.get('/api/employees', checkDb, async (req, res) => {
