@@ -44,27 +44,39 @@ const checkDb = (req, res, next) => {
 const WEBHOOK_LOG_DIR = path.join(__dirname, 'data', 'webhook_logs');
 if (!fs.existsSync(WEBHOOK_LOG_DIR)) fs.mkdirSync(WEBHOOK_LOG_DIR, { recursive: true });
 
+// Helper to get value from nested object path (e.g. "entity.no")
+function getValueByPath(obj, path) {
+    if (!path) return null;
+    if (path.startsWith('cf:')) {
+        const cfId = path.split(':')[1];
+        const customFields = (obj.entity && obj.entity.custom_fields) || obj.custom_fields || [];
+        const field = customFields.find(f => f.id === cfId);
+        return field ? field.value : null;
+    }
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+}
+
 // ============================================
-// SCORO WEBHOOK HANDLER (WITH PAYLOAD CAPTURE)
+// DYNAMIC WEBHOOK HANDLER
 // ============================================
 app.post('/api/webhooks/scoro', checkDb, async (req, res) => {
   try {
     const body = req.body;
-    
-    // CAPTURE: Save the raw payload to a file for inspection
-    const timestamp = Date.now();
-    const logFilename = `scoro_${timestamp}.json`;
-    fs.writeFileSync(path.join(WEBHOOK_LOG_DIR, logFilename), JSON.stringify(body, null, 2));
+    fs.writeFileSync(path.join(WEBHOOK_LOG_DIR, `scoro_${Date.now()}.json`), JSON.stringify(body, null, 2));
 
-    console.log(`Captured SCORO Webhook: ${logFilename}`);
+    // Fetch user-defined mappings from DB
+    const mappingSnap = await db.ref('settings/scoro_mapping').once('value');
+    const mappings = mappingSnap.val() || {
+        proj_no: "entity.no",
+        name: "entity.project_name",
+        client: "entity.company_name",
+        vessel_name: "cf:c_vesselname"
+    };
 
-    const data = body.data || body;
-    
-    // Mapping logic
-    const projNo = data.project_number || data.no || data.project_no || data.number || data.project_id || data.id || 'SC-' + timestamp;
-    const projName = data.project_name || data.name || data.object_name || 'New SCORO Project';
-    const client = data.company_name || data.client_name || data.account_name || data.company || 'SCORO Client';
-    const vessel = data.vessel_name || data.custom_vessel || 'N/A';
+    const projNo = getValueByPath(body, mappings.proj_no) || 'SC-' + Date.now();
+    const projName = getValueByPath(body, mappings.name) || 'New Project';
+    const client = getValueByPath(body, mappings.client) || 'Client';
+    const vessel = getValueByPath(body, mappings.vessel_name) || 'N/A';
 
     const id = 'proj_' + projNo.toString().replace(/[^a-zA-Z0-9]/g, '_');
     const projectData = {
@@ -79,110 +91,88 @@ app.post('/api/webhooks/scoro', checkDb, async (req, res) => {
     };
 
     await db.ref('projects/' + id).update(projectData);
-    res.status(200).json({ status: 'success', log: logFilename });
+    res.status(200).json({ status: 'success' });
   } catch (error) {
-    console.error('SCORO Webhook Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Admin Route to view captured webhooks
+// Mapping API
+app.get('/api/settings/mapping', checkDb, async (req, res) => {
+    const snap = await db.ref('settings/scoro_mapping').once('value');
+    res.json(snap.val() || {});
+});
+
+app.post('/api/settings/mapping', checkDb, async (req, res) => {
+    await db.ref('settings/scoro_mapping').set(req.body);
+    res.json({ success: true });
+});
+
 app.get('/api/admin/webhooks', async (req, res) => {
     try {
-        const files = fs.readdirSync(WEBHOOK_LOG_DIR)
-            .filter(f => f.endsWith('.json'))
+        const files = fs.readdirSync(WEBHOOK_LOG_DIR).filter(f => f.endsWith('.json'))
             .sort((a, b) => fs.statSync(path.join(WEBHOOK_LOG_DIR, b)).mtime - fs.statSync(path.join(WEBHOOK_LOG_DIR, a)).mtime);
-        
-        const logs = files.slice(0, 10).map(f => ({
-            name: f,
-            content: JSON.parse(fs.readFileSync(path.join(WEBHOOK_LOG_DIR, f), 'utf8')),
-            time: fs.statSync(path.join(WEBHOOK_LOG_DIR, f)).mtime
-        }));
+        const logs = files.slice(0, 5).map(f => ({ name: f, content: JSON.parse(fs.readFileSync(path.join(WEBHOOK_LOG_DIR, f), 'utf8')) }));
         res.json(logs);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ============================================
-// STANDARD API ROUTES
-// ============================================
-
+// Standard Routes...
 app.get('/api/employees', checkDb, async (req, res) => {
-  try {
-    const snap = await db.ref('employees').once('value');
-    res.json(Object.values(snap.val() || {}));
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  const snap = await db.ref('employees').once('value');
+  res.json(Object.values(snap.val() || {}));
 });
-
 app.post('/api/employees', checkDb, async (req, res) => {
   const id = req.body.id || 'emp_' + Date.now();
   await db.ref('employees/' + id).set({ ...req.body, id });
   res.status(201).json({ id });
 });
-
 app.put('/api/employees/:id', checkDb, async (req, res) => {
   await db.ref('employees/' + req.params.id).update(req.body);
   res.json({ success: true });
 });
-
 app.delete('/api/employees/:id', checkDb, async (req, res) => {
   await db.ref('employees/' + req.params.id).remove();
   res.json({ success: true });
 });
-
 app.get('/api/projects', checkDb, async (req, res) => {
-  try {
-    const snap = await db.ref('projects').once('value');
-    res.json(Object.values(snap.val() || {}));
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  const snap = await db.ref('projects').once('value');
+  res.json(Object.values(snap.val() || {}));
 });
-
 app.post('/api/projects', checkDb, async (req, res) => {
   const id = req.body.id || 'proj_' + Date.now();
   await db.ref('projects/' + id).set({ ...req.body, id });
   res.status(201).json({ id });
 });
-
 app.put('/api/projects/:id', checkDb, async (req, res) => {
   await db.ref('projects/' + req.params.id).update(req.body);
   res.json({ success: true });
 });
-
 app.delete('/api/projects/:id', checkDb, async (req, res) => {
   await db.ref('projects/' + req.params.id).remove();
   res.json({ success: true });
 });
-
 app.get('/api/entries', checkDb, async (req, res) => {
-  try {
     const snap = await db.ref('time_entries').once('value');
     const entries = Object.values(snap.val() || {});
     const emps = (await db.ref('employees').once('value')).val() || {};
     const projs = (await db.ref('projects').once('value')).val() || {};
-    const hydrated = entries.map(e => ({
-      ...e,
-      employee_name: emps[e.employee_id]?.name || 'Unknown',
-      project_name: projs[e.project_id]?.name || 'Internal'
-    }));
+    const hydrated = entries.map(e => ({ ...e, employee_name: emps[e.employee_id]?.name || 'Unknown', project_name: projs[e.project_id]?.name || 'Internal' }));
     res.json(hydrated.sort((a, b) => new Date(b.start_time) - new Date(a.start_time)));
-  } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
 app.post('/api/entries', checkDb, async (req, res) => {
   const id = db.ref('time_entries').push().key;
   await db.ref('time_entries/' + id).set({ ...req.body, id });
   res.status(201).json({ id });
 });
-
 app.put('/api/entries/:id', checkDb, async (req, res) => {
   await db.ref('time_entries/' + req.params.id).update(req.body);
   res.json({ success: true });
 });
-
 app.delete('/api/entries/:id', checkDb, async (req, res) => {
   await db.ref('time_entries/' + req.params.id).remove();
   res.json({ success: true });
 });
-
 app.post('/api/hr/dispatch', checkDb, async (req, res) => {
   try {
     const entriesSnap = await db.ref('time_entries').once('value');
