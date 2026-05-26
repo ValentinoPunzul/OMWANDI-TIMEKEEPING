@@ -9,6 +9,8 @@ const state = {
   activeProfileId: localStorage.getItem('chronos_user_id') || null, 
   activeView: 'dashboard',
   isOnline: navigator.onLine,
+  employeeSortField: 'name',
+  employeeSortDir: 'asc',
   userRole: 'Employee',
   scoroMapping: {}
 };
@@ -36,7 +38,7 @@ function checkAuth() {
             const roleEl = document.getElementById('activeRole');
             const avatarEl = document.getElementById('activeAvatar');
             if(nameEl) nameEl.textContent = me.name;
-            if(roleEl) roleEl.textContent = me.designation || 'Staff';
+            if(roleEl) roleEl.textContent = me.designation || me.role || 'Staff';
             if(avatarEl) { avatarEl.textContent = me.avatar || '??'; avatarEl.style.background = me.color || '#6366f1'; }
             
             updateSidebarVisibility(state.userRole);
@@ -142,7 +144,7 @@ function renderDashboard(container) {
             }).join('');
             return `<div class="project-group"><h3>[${proj.proj_no || '---'}] ${proj.name}</h3>${list}</div>`;
         }).join('');
-    container.innerHTML = `<div class="clock-card glass-container"><div class="dashboard-time" id="dashboardTime">00:00:00</div><div class="dashboard-date" id="dashboardDate">LOADING...</div></div><div class="active-timers-section">${html}</div>`;
+    container.innerHTML = `<div class="clock-card glass-container"><div class="dashboard-time" id="dashboardTime">00:00:00</div></div><div class="active-timers-section">${html}</div>`;
 }
 
 function roundToQuarter(hours) { return Math.floor(hours * 4) / 4; }
@@ -167,18 +169,42 @@ function renderTimer(container) {
     
     container.innerHTML = `
         ${employeeHeader}
-        <div class="timer-view-container glass-container" style="max-width:500px; margin: 0 auto; text-align:center;">
-            <div id="faceClock" style="font-size:4.5rem; font-weight:800; margin-bottom:10px; font-family:monospace;">00:00:00</div>
+        <div class="timer-view-container glass-container">
+            <div id="faceClock" style="font-size:4rem; margin-bottom:10px; font-family:monospace;">00:00:00</div>
             <div style="margin-bottom:20px; display:flex; align-items:center; justify-content:center; gap:8px;">${myActiveEntry ? '<span class="pulse-emerald" style="width:10px; height:10px;"></span> <span style="color:#10b981; font-size:0.8rem; letter-spacing:1px; font-weight:700;">LIVE SESSION ACTIVE</span>' : '<span style="color:var(--text-muted); font-size:0.8rem;">READY TO TRACK</span>'}</div>
             <div style="text-align:left; margin-bottom:20px;">
                 <label style="font-size:0.7rem; opacity:0.7; font-weight:700;">SEARCH PROJECT</label>
                 <input type="text" id="projectSearch" class="form-control" style="margin-bottom:12px;" placeholder="Project # or Name..." oninput="window.filterTimerProjects(this.value)" ${myActiveEntry ? 'disabled' : ''}>
-                <select id="timerProjectSelect" class="form-control" ${myActiveEntry ? 'disabled' : ''}><option value="">-- Select Project --</option>${projects}</select>
+                <select id="timerProjectSelect" class="form-control" ${myActiveEntry ? 'disabled' : ''} onchange="window.handleTimerProjectChange(this.value)">
+                    <option value="">-- Select Project --</option>
+                    ${projects}
+                </select>
             </div>
+            
+            <div id="nptNotesContainer" class="hidden" style="text-align:left; margin-bottom:20px;">
+                <label style="font-size:0.7rem; opacity:0.7; font-weight:700;">NPT NOTES (REQUIRED)</label>
+                <textarea id="nptNotes" class="form-control" style="height:100px; resize:none;" placeholder="Enter details about this Non Productive Time..."></textarea>
+            </div>
+
             ${actionBtn}
         </div>
     `;
+
+    // Trigger check on load if it's already selected
+    if (!myActiveEntry) {
+        window.handleTimerProjectChange(document.getElementById('timerProjectSelect').value);
+    }
 }
+
+window.handleTimerProjectChange = (pid) => {
+    const notesContainer = document.getElementById('nptNotesContainer');
+    const project = state.projects.find(p => p.id === pid);
+    if (project && project.proj_no === '1000') {
+        notesContainer.classList.remove('hidden');
+    } else {
+        notesContainer.classList.add('hidden');
+    }
+};
 
 window.filterTimerProjects = (query) => {
     const select = document.getElementById('timerProjectSelect');
@@ -186,14 +212,26 @@ window.filterTimerProjects = (query) => {
     const q = query.toLowerCase();
     const filtered = state.projects.filter(p => (p.proj_no && p.proj_no.toLowerCase().includes(q)) || (p.name && p.name.toLowerCase().includes(q)));
     select.innerHTML = '<option value="">-- Select Project --</option>' + filtered.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
+    window.handleTimerProjectChange(select.value);
 };
 
 async function startTimer() {
     const active = state.timeEntries.find(e => e.employee_id === state.activeProfileId && (!e.end_time || e.total_hours === 0));
     if (active) return alert('Session already active.');
+    
     const pid = document.getElementById('timerProjectSelect').value;
     if (!pid) return alert('Select project.');
-    await apiRequest('/api/entries', { method: 'POST', body: JSON.stringify({ employee_id: state.activeProfileId, project_id: pid, start_time: new Date().toISOString(), total_hours: 0 }) });
+    
+    const project = state.projects.find(p => p.id === pid);
+    let description = 'Track Log';
+    
+    if (project && project.proj_no === '1000') {
+        const notes = document.getElementById('nptNotes').value.trim();
+        if (!notes) return alert('Notes are required for Project 1000 NPT');
+        description = notes;
+    }
+
+    await apiRequest('/api/entries', { method: 'POST', body: JSON.stringify({ employee_id: state.activeProfileId, project_id: pid, start_time: new Date().toISOString(), total_hours: 0, task: 'NPT Track', description: description }) });
     await initializeState(); renderTimer(document.getElementById('mainContent'));
 }
 
@@ -236,15 +274,16 @@ function renderTimesheets(container) {
         const date = e.start_time ? e.start_time.split('T')[0] : '---';
         const startT = e.start_time ? new Date(e.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
         const endT = e.end_time ? new Date(e.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '---';
-        return `<tr><td>${date}</td><td>${e.employee_name}</td><td>${e.project_name}</td><td>${startT}</td><td>${endT}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
+        const notes = e.description && e.description !== 'Track Log' ? `<br><small style="color:var(--text-muted)">Note: ${e.description}</small>` : '';
+        return `<tr><td>${date}</td><td>${e.employee_name}</td><td>${e.project_name}${notes}</td><td>${startT}</td><td>${endT}</td><td>${(e.total_hours || 0).toFixed(2)}h</td></tr>`;
     }).join('');
     container.innerHTML = `<h2>Timesheets</h2><div class="glass-container"><div class="table-container"><table><thead><tr><th>Date</th><th>Member</th><th>Project</th><th>Start</th><th>End</th><th>Hours</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
-    const sortedEmployees = [...state.employees].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-    const userOptions = sortedEmployees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+    if (!isAdmin && state.userRole !== 'Editor') { container.innerHTML = 'Access Denied'; return; }
+    const userOptions = state.employees.sort((a,b) => a.name.localeCompare(b.name)).map(e => `<option value="${e.id}">${e.name}</option>`).join('');
     const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
 
     container.innerHTML = `
@@ -280,7 +319,7 @@ function renderSettings(container) {
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">DEPT</label><input type="text" id="userDepartment" class="form-control"></div>
-                    <div><label style="font-size:0.7rem; opacity:0.7;">REPORTS TO</label><input type="text" id="userReportsTo" class="form-control"></div>
+                    <div><label style="font-size:0.7rem; opacity:0.7;">SUB DEPT</label><input type="text" id="userSubDepartment" class="form-control"></div>
                 </div>
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">ROLE</label><select id="userAccessRole" class="form-control"><option value="Employee">Employee</option><option value="Editor">Editor</option><option value="Administrator">Administrator</option></select></div>
@@ -295,7 +334,7 @@ function renderSettings(container) {
             <select id="projectSelect" class="form-control" style="margin:20px 0;" onchange="handleProjectSelect(this.value)"><option value="">-- Add New Project --</option>${projectOptions}</select>
             <div id="projectForm" class="settings-form">
                 <input type="hidden" id="projectId">
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:16px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
                     <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NO</label><input type="text" id="projectNo" class="form-control"></div>
                     <div><label style="font-size:0.7rem; opacity:0.7;">PROJECT NAME</label><input type="text" id="projectName" class="form-control"></div>
                 </div>
@@ -314,8 +353,8 @@ function renderSettings(container) {
 
 // Support Functions...
 async function saveMapping() { const data = { proj_no: document.getElementById('mapProjNo').value, name: document.getElementById('mapName').value, client: document.getElementById('mapClient').value, vessel_name: document.getElementById('mapVessel').value }; await apiRequest('/api/settings/mapping', { method: 'POST', body: JSON.stringify(data) }); showNotification('Mapping saved!', 'success'); }
-async function handleUserSubmit() { const name = document.getElementById('userName').value; if(!name) return alert('Name required'); const userData = { emp_no: document.getElementById('userEmpNo').value, password: document.getElementById('userPassword').value, name, designation: document.getElementById('userDesignation').value, department: document.getElementById('userDepartment').value, reports_to: document.getElementById('userReportsTo').value, access_role: document.getElementById('userAccessRole').value, color: document.getElementById('userColor').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) }; const id = document.getElementById('userId').value; if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) }); else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
-function editEmployee(id) { const emp = state.employees.find(e => e.id === id); if (!emp) { resetUserForm(); return; } document.getElementById('userId').value = emp.id; document.getElementById('userEmpNo').value = emp.emp_no || ''; document.getElementById('userName').value = emp.name || ''; document.getElementById('userPassword').value = emp.password || ''; document.getElementById('userDesignation').value = emp.designation || ''; document.getElementById('userDepartment').value = emp.department || ''; document.getElementById('userReportsTo').value = emp.reports_to || ''; document.getElementById('userAccessRole').value = emp.access_role || 'Employee'; document.getElementById('userColor').value = emp.color || '#6366f1'; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
+async function handleUserSubmit() { const name = document.getElementById('userName').value; if(!name) return alert('Name required'); const userData = { emp_no: document.getElementById('userEmpNo').value, password: document.getElementById('userPassword').value, name, designation: document.getElementById('userDesignation').value, department: document.getElementById('userDepartment').value, sub_department: document.getElementById('userSubDepartment').value, access_role: document.getElementById('userAccessRole').value, color: document.getElementById('userColor').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) }; const id = document.getElementById('userId').value; if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) }); else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
+function editEmployee(id) { const emp = state.employees.find(e => e.id === id); if (!emp) { resetUserForm(); return; } document.getElementById('userId').value = emp.id; document.getElementById('userEmpNo').value = emp.emp_no || ''; document.getElementById('userName').value = emp.name || ''; document.getElementById('userPassword').value = emp.password || ''; document.getElementById('userDesignation').value = emp.designation || ''; document.getElementById('userDepartment').value = emp.department || ''; document.getElementById('userSubDepartment').value = emp.sub_department || ''; document.getElementById('userAccessRole').value = emp.access_role || 'Employee'; document.getElementById('userColor').value = emp.color || '#6366f1'; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
 async function deleteEmployee() { const id = document.getElementById('userId').value; if (!id || !confirm('Delete employee?')) return; await apiRequest(`/api/employees/${id}`, { method: 'DELETE' }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
 function resetUserForm() { document.getElementById('userId').value = ''; const form = document.getElementById('userForm'); if (form) form.reset(); document.getElementById('userSelect').value = ''; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'none'; }
 function handleProjectSelect(id) { const p = state.projects.find(p => p.id === id); if (!p) { resetProjectForm(); return; } document.getElementById('projectId').value = p.id; document.getElementById('projectNo').value = p.proj_no || ''; document.getElementById('projectName').value = p.name || ''; document.getElementById('projectClient').value = p.client || ''; document.getElementById('projectVessel').value = p.vessel_name || ''; document.getElementById('projectBudget').value = p.budget_hours || ''; const delBtn = document.getElementById('deleteProjectBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
