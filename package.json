@@ -1,5 +1,5 @@
 {
-  "name": "chronos-flow",
+  "name": "omwandi-timekeeper",
   "version": "1.0.0",
   "description": "Premium Full-Stack Mobile PWA Timekeeper with Offline Sync and Firebase Realtime Database",
   "main": "server.js",
