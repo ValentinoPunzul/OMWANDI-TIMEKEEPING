@@ -13,11 +13,11 @@
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="/styles.css?v=4.8">
+  <link rel="stylesheet" href="/styles.css?v=4.9">
   <style>
-    /* Premium Login Styles matching Screenshot exactly */
+    /* Premium Login Styles */
     #loginOverlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: #f4f7fa; 
@@ -28,33 +28,21 @@
       width: 100%; max-width: 440px; padding: 40px; text-align: center;
       background: #ffffff; border-radius: 12px; border: 1px solid #e1e8f0;
       box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+      position: relative;
     }
-    /* Fixed Logo Styling */
     .login-logo-container {
-        width: 100%;
-        max-width: 280px;
-        height: 120px;
-        margin: 0 auto 30px auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        width: 100%; max-width: 280px; height: 120px;
+        margin: 0 auto 30px auto; display: flex; align-items: center; justify-content: center;
     }
-    .login-logo { 
-        max-width: 100%; 
-        max-height: 100%; 
-        object-fit: contain;
-        display: block; 
-    }
+    .login-logo { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
     .login-title { 
+        font-family: 'Montserrat', sans-serif;
         font-size: 1.8rem; font-weight: 800; color: #000; 
         margin-bottom: 40px; text-transform: uppercase; letter-spacing: 0.5px;
     }
     .form-group { text-align: left; margin-bottom: 24px; position: relative; }
     .form-label-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-    .form-label { 
-        display: block; font-size: 0.85rem; font-weight: 600; 
-        color: #000; text-transform: none;
-    }
+    .form-label { display: block; font-size: 0.85rem; font-weight: 600; color: #000; }
     .forgot-link { font-size: 0.85rem; color: #000; text-decoration: underline; cursor: pointer; }
     
     .login-input {
@@ -72,6 +60,12 @@
       margin-top: 10px; transition: 0.2s;
     }
     .btn-login:hover { background: #0b5ed7; }
+    
+    .auth-footer {
+        margin-top: 40px; font-size: 0.75rem; font-weight: 700;
+        color: #8fa3bf; letter-spacing: 1.5px; text-transform: uppercase;
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -81,17 +75,14 @@
   <div id="loginOverlay">
     <div class="login-card">
       <div class="login-logo-container">
-        <!-- Using absolute path and fallback logic -->
         <img src="/icons/logo.png" class="login-logo" alt="Omwandi Logo" onerror="this.src='/icons/logo.svg'">
       </div>
       <h1 class="login-title">OMWANDI TIMEKEEPER</h1>
       
       <form id="loginForm">
         <div class="form-group">
-            <div class="form-label-row">
-                <label class="form-label">Email</label>
-            </div>
-            <input type="text" id="loginEmpNo" class="login-input" placeholder="m@example.com" required autofocus>
+            <div class="form-label-row"><label class="form-label">Employee Number</label></div>
+            <input type="text" id="loginEmpNo" class="login-input" placeholder="e.g. 111" required autofocus>
         </div>
         <div class="form-group">
             <div class="form-label-row">
@@ -106,6 +97,8 @@
         </button>
       </form>
       <p id="loginError" style="color: #ef4444; font-size: 0.85rem; margin-top: 20px; font-weight: 500;" class="hidden">Invalid credentials. Please try again.</p>
+      
+      <div class="auth-footer">AUTHORIZED ACCESS ONLY</div>
     </div>
   </div>
   
@@ -165,6 +158,6 @@
   </div>
 
   <div class="notification-container" id="notificationContainer"></div>
-  <script src="/app.js?v=4.8"></script>
+  <script src="/app.js?v=4.10"></script>
 </body>
 </html>
