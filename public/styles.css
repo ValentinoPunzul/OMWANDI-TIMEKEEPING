@@ -31,9 +31,29 @@ h1, h2, h3, h4, th, b, strong { font-weight: 500; }
 .app-layout.no-sidebar { grid-template-columns: 1fr; }
 .no-sidebar .sidebar { display: none !important; }
 
+/* Mobile Navigation Bar (Only for Foremen) */
+.mobile-nav {
+    position: fixed; bottom: 0; left: 0; width: 100%; height: 65px;
+    background: rgba(13, 20, 34, 0.95); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--glass-border);
+    display: none; justify-content: space-around; align-items: center;
+    z-index: 1000;
+}
+
+@media (max-width: 768px) {
+    .no-sidebar .mobile-nav { display: flex; }
+    .main-content { padding: 20px 20px 80px 20px !important; } /* Padding for bottom nav */
+}
+
+.mobile-nav-item {
+    background: none; border: none; color: var(--text-muted);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+}
+.mobile-nav-item.active { color: var(--accent-primary); }
+
 /* Sidebar */
 .sidebar { padding: 40px 24px; background: rgba(0, 0, 0, 0.2); border-right: 1px solid var(--glass-border); display: flex; flex-direction: column; }
-.brand { margin-bottom: 30px; }
 .brand h1 { font-size: 1.4rem; letter-spacing: 0.5px; font-weight: 800; color: #fff; }
 .nav-menu { display: flex; flex-direction: column; gap: 4px; margin-top: 20px; }
 .nav-item {
@@ -46,44 +66,21 @@ h1, h2, h3, h4, th, b, strong { font-weight: 500; }
 /* Components */
 .glass-container { background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); padding: 30px; width: 100%; }
 .main-content { padding: 40px; width: 100%; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; }
+.view-header { margin-bottom: 32px; display: flex; justify-content: space-between; align-items: center; }
 
 /* Timer View Optimization */
-.timer-view-wrapper {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center; /* Center timer vertically */
-    align-items: center;
-    width: 100%;
-}
-
-.timer-view-container {
-    width: 100%;
-    max-width: 500px;
-    text-align: center;
-}
-
-#faceClock { font-size: 5.5rem; font-weight: 800; font-family: monospace; line-height: 1; margin-bottom: 10px; }
+.timer-view-wrapper { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
+.timer-view-container { width: 100%; max-width: 500px; text-align: center; }
+#faceClock { font-size: 4.5rem; font-weight: 800; font-family: monospace; line-height: 1; margin-bottom: 10px; }
 
 /* Mobile Optimizations */
 @media (max-width: 768px) {
   .app-layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .main-content { padding: 20px; min-height: 100dvh; }
-  #faceClock { font-size: 4rem; }
+  .main-content { padding: 20px; }
+  #faceClock { font-size: 3.5rem; }
   .dashboard-time { font-size: 3.5rem; }
-  .glass-container { padding: 24px 20px; }
-  .btn { padding: 16px 20px; font-size: 1.1rem; }
 }
-
-@media (max-height: 600px) {
-    #faceClock { font-size: 3rem; }
-    .view-header { margin-bottom: 15px; }
-}
-
-/* Project Grid (5 per row) */
-.projects-grid-v2 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; width: 100%; }
-.project-card-v2 { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 
 /* Progress & Status */
 .progress-container { height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; }
@@ -91,7 +88,7 @@ h1, h2, h3, h4, th, b, strong { font-weight: 500; }
 .pulse-emerald { width: 8px; height: 8px; background: var(--accent-emerald); border-radius: 50%; box-shadow: 0 0 10px var(--accent-emerald); animation: pulse 2s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-/* Form Controls */
+/* Controls */
 .form-control { width: 100%; padding: 14px; background: rgba(0,0,0,0.3) !important; border: 1px solid var(--glass-border); border-radius: 8px; color: #fff !important; outline: none; }
 .btn { padding: 14px 28px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; border: none; }
 .btn.primary { background: var(--accent-primary); color: #fff; }
@@ -103,3 +100,4 @@ h1, h2, h3, h4, th, b, strong { font-weight: 500; }
 .table-container { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 16px 12px; border-bottom: 1px solid var(--glass-border); }
+.project-card-v2 { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
