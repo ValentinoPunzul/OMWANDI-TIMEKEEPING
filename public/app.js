@@ -1,5 +1,5 @@
 /* ==========================================================================
-   OMWANDI TIMEKEEPER - FULL ENTERPRISE CLIENT (STABLE VERSION)
+   OMWANDI TIMEKEEPER - PURE DATABASE CLIENT
    ========================================================================== */
 
 const state = {
@@ -36,9 +36,11 @@ function checkAuth() {
         const me = state.employees.find(e => e.id === state.activeProfileId);
         if (me) {
             state.userRole = me.access_role || 'Employee';
-            document.getElementById('activeName').textContent = me.name;
-            document.getElementById('activeRole').textContent = me.designation || 'Staff';
+            const nameEl = document.getElementById('activeName');
+            const roleEl = document.getElementById('activeRole');
             const avatarEl = document.getElementById('activeAvatar');
+            if(nameEl) nameEl.textContent = me.name;
+            if(roleEl) roleEl.textContent = me.designation || me.role || 'Staff';
             if(avatarEl) { avatarEl.textContent = me.avatar || '??'; avatarEl.style.background = me.color || '#6366f1'; }
             updateSidebarVisibility(state.userRole);
             if (loginOverlay) loginOverlay.classList.add('hidden');
@@ -53,12 +55,8 @@ function checkAuth() {
 
 function updateSidebarVisibility(role) {
     const layout = document.getElementById('appLayout');
-    if (role === 'Employee' || role === 'Viewer') {
-        layout.classList.add('no-sidebar');
-        state.activeView = 'timer';
-    } else {
-        layout.classList.remove('no-sidebar');
-    }
+    if (role === 'Employee' || role === 'Viewer') { layout.classList.add('no-sidebar'); state.activeView = 'timer'; }
+    else { layout.classList.remove('no-sidebar'); }
 }
 
 async function initializeState() {
@@ -69,11 +67,11 @@ async function initializeState() {
       apiRequest('/api/entries'),
       apiRequest('/api/settings/mapping')
     ]);
-    state.employees = employees;
-    state.projects = projects;
-    state.timeEntries = entries;
-    state.scoroMapping = mapping;
-  } catch (e) { console.error('Sync Error:', e); }
+    state.employees = employees || [];
+    state.projects = projects || [];
+    state.timeEntries = entries || [];
+    state.scoroMapping = mapping || {};
+  } catch (e) { console.error('API Init Failed:', e); }
 }
 
 function startDataRefresh() {
@@ -125,7 +123,7 @@ function renderDashboard(container) {
     const activeTimers = state.timeEntries.filter(e => (e.total_hours === 0 || !e.end_time) && e.start_time);
     const grouped = {};
     activeTimers.forEach(timer => { if (!grouped[timer.project_id]) grouped[timer.project_id] = []; grouped[timer.project_id].push(timer); });
-    let html = activeTimers.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--text-muted);">No active sessions.</div>' : 
+    let html = activeTimers.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--text-muted);">No active sessions found in database.</div>' : 
         Object.entries(grouped).map(([pid, timers]) => {
             const proj = state.projects.find(p => p.id === pid) || { name: 'Internal', color: '#6366f1' };
             const list = timers.map(t => {
@@ -154,8 +152,7 @@ async function stopUserTimer(id) {
     if (!entry) return;
     const now = new Date();
     const rawHours = Math.abs(now - new Date(entry.start_time)) / 36e5;
-    const roundedHours = roundToQuarter(rawHours);
-    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: now.toISOString(), total_hours: roundedHours }) });
+    await apiRequest(`/api/entries/${id}`, { method: 'PUT', body: JSON.stringify({ end_time: now.toISOString(), total_hours: roundToQuarter(rawHours) }) });
     const searchInput = document.getElementById('projectSearch');
     if (searchInput) searchInput.value = '';
     await initializeState(); switchView(state.activeView);
@@ -224,7 +221,7 @@ async function startTimer() {
 }
 
 function renderProjects(container) {
-    const html = state.projects.map(p => {
+    const html = state.projects.length === 0 ? '<div style="text-align:center; padding:40px; color:var(--text-muted);">No projects found in database.</div>' : state.projects.map(p => {
         const spent = state.timeEntries.filter(e => e.project_id === p.id).reduce((sum, e) => sum + (e.total_hours || 0), 0);
         const budget = parseFloat(p.budget_hours) || 0;
         const progress = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
@@ -240,9 +237,9 @@ function renderProjects(container) {
 }
 
 function renderTeam(container) {
-    const rows = state.employees.sort((a,b) => a.name.localeCompare(b.name)).map(e => {
+    const rows = state.employees.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(e => {
         const hours = state.timeEntries.filter(te => te.employee_id === e.id).reduce((sum, te) => sum + (te.total_hours || 0), 0);
-        return `<tr><td><div style="display:flex; align-items:center; gap:12px;"><div style="width:36px; height:36px; border-radius:50%; background:${e.color}; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.8rem;">${e.avatar}</div><div><div>${e.name}</div><div style="font-size:0.75rem; color:var(--text-muted);">#${e.emp_no || '---'}</div></div></div></td><td><span style="padding:4px 12px; background:rgba(255,255,255,0.05); border-radius:12px; font-size:0.8rem;">${e.designation || 'Staff'}</span></td><td style="color:var(--text-muted); font-size:0.85rem;">${e.reports_to || '---'}</td><td style="font-weight:600;">${hours.toFixed(1)} hrs</td><td style="text-align:right;"><button class="btn-text" style="color:var(--accent-primary);" onclick="state.activeView='settings'; renderSettings(document.getElementById('mainContent')); editEmployee('${e.id}')">✎</button></td></tr>`;
+        return `<tr><td><div style="display:flex; align-items:center; gap:12px;"><div style="width:36px; height:36px; border-radius:50%; background:${e.color}; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.8rem;">${e.avatar}</div><div><div>${e.name}</div><div style="font-size:0.75rem; color:var(--text-muted);">#${e.emp_no || '---'}</div></div></div></td><td><span style="padding:4px 12px; background:rgba(255,255,255,0.05); border-radius:12px; font-size:0.8rem;">${e.designation || 'Staff'}</span></td><td>${e.reports_to || '---'}</td><td>${hours.toFixed(1)} hrs</td><td style="text-align:right;"><button class="btn-text" style="color:var(--accent-primary);" onclick="state.activeView='settings'; renderSettings(document.getElementById('mainContent')); editEmployee('${e.id}')">✎</button></td></tr>`;
     }).join('');
     container.innerHTML = `<div class="view-header"><h2>Team</h2></div><div class="glass-container"><div class="table-container"><table><thead><tr><th>Employee</th><th>Role</th><th>Reports To</th><th>Logged</th><th style="text-align:right;">Action</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
@@ -270,7 +267,7 @@ window.setTimesheetSort = (field) => {
 function renderSettings(container) {
     const isAdmin = state.userRole === 'Administrator';
     const sortedEmployees = [...state.employees].sort((a,b) => (a.name || '').localeCompare(b.name || ''));
-    const userOptions = sortedEmployees.map(e => `<option value="${e.id}">${e.name} (${e.emp_no || '---'})</option>`).join('');
+    const userOptions = sortedEmployees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
     const projectOptions = state.projects.map(p => `<option value="${p.id}">${p.proj_no ? '['+p.proj_no+'] ' : ''}${p.name}</option>`).join('');
 
     container.innerHTML = `
@@ -342,9 +339,10 @@ function renderSettings(container) {
     `;
 }
 
+// Support Logic
 async function saveMapping() { const data = { proj_no: document.getElementById('mapProjNo').value, name: document.getElementById('mapName').value, client: document.getElementById('mapClient').value, vessel_name: document.getElementById('mapVessel').value }; await apiRequest('/api/settings/mapping', { method: 'POST', body: JSON.stringify(data) }); showNotification('Mapping saved!', 'success'); }
-async function handleUserSubmit() { const name = document.getElementById('userName').value; if(!name) return alert('Name required'); const userData = { emp_no: document.getElementById('userEmpNo').value, password: document.getElementById('userPassword').value, name, designation: document.getElementById('userDesignation').value, department: document.getElementById('userDepartment').value, sub_department: document.getElementById('userSubDepartment').value, reports_to: document.getElementById('userReportsTo').value, access_role: document.getElementById('userAccessRole').value, avatar_url: document.getElementById('userAvatarUrl').value, color: document.getElementById('userColor').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) }; const id = document.getElementById('userId').value; if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) }); else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
-function editEmployee(id) { const emp = state.employees.find(e => e.id === id); if (!emp) { resetUserForm(); return; } document.getElementById('userId').value = emp.id; document.getElementById('userEmpNo').value = emp.emp_no || ''; document.getElementById('userName').value = emp.name || ''; document.getElementById('userPassword').value = emp.password || ''; document.getElementById('userDesignation').value = emp.designation || ''; document.getElementById('userDepartment').value = emp.department || ''; document.getElementById('userSubDepartment').value = emp.sub_department || ''; document.getElementById('userReportsTo').value = emp.reports_to || ''; document.getElementById('userAccessRole').value = emp.access_role || 'Employee'; document.getElementById('userAvatarUrl').value = emp.avatar_url || ''; document.getElementById('userColor').value = emp.color || '#6366f1'; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
+async function handleUserSubmit() { const name = document.getElementById('userName').value; if(!name) return alert('Name required'); const userData = { emp_no: document.getElementById('userEmpNo').value, password: document.getElementById('userPassword').value, name, designation: document.getElementById('userDesignation').value, department: document.getElementById('userDepartment').value, sub_department: document.getElementById('userSubDepartment').value, access_role: document.getElementById('userAccessRole').value, color: document.getElementById('userColor').value, avatar: name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) }; const id = document.getElementById('userId').value; if (id) await apiRequest(`/api/employees/${id}`, { method: 'PUT', body: JSON.stringify(userData) }); else await apiRequest('/api/employees', { method: 'POST', body: JSON.stringify(userData) }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
+function editEmployee(id) { const emp = state.employees.find(e => e.id === id); if (!emp) { resetUserForm(); return; } document.getElementById('userId').value = emp.id; document.getElementById('userEmpNo').value = emp.emp_no || ''; document.getElementById('userName').value = emp.name || ''; document.getElementById('userPassword').value = emp.password || ''; document.getElementById('userDesignation').value = emp.designation || ''; document.getElementById('userDepartment').value = emp.department || ''; document.getElementById('userSubDepartment').value = emp.sub_department || ''; document.getElementById('userAccessRole').value = emp.access_role || 'Employee'; document.getElementById('userColor').value = emp.color || '#6366f1'; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
 async function deleteEmployee() { const id = document.getElementById('userId').value; if (!id || !confirm('Delete employee?')) return; await apiRequest(`/api/employees/${id}`, { method: 'DELETE' }); await initializeState(); renderSettings(document.getElementById('mainContent')); }
 function resetUserForm() { document.getElementById('userId').value = ''; const form = document.getElementById('userForm'); if (form) form.reset(); document.getElementById('userSelect').value = ''; const delBtn = document.getElementById('deleteEmployeeBtn'); if (delBtn) delBtn.style.display = 'none'; }
 function handleProjectSelect(id) { const p = state.projects.find(p => p.id === id); if (!p) { resetProjectForm(); return; } document.getElementById('projectId').value = p.id; document.getElementById('projectNo').value = p.proj_no || ''; document.getElementById('projectName').value = p.name || ''; document.getElementById('projectClient').value = p.client || ''; document.getElementById('projectVessel').value = p.vessel_name || ''; document.getElementById('projectBudget').value = p.budget_hours || ''; const delBtn = document.getElementById('deleteProjectBtn'); if (delBtn) delBtn.style.display = 'inline-block'; }
