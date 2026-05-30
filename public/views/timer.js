@@ -29,26 +29,27 @@ export function renderTimerView() {
             ${activeEntry ? renderActiveControls(activeEntry) : renderStartForm()}
         </div>`;
     if (activeEntry) startTickingDisplay(activeEntry);
-    else populateProjectSelect();
 }
 
 function renderStartForm() {
+    const projectOptions = state.projects
+        .map(p => `<option value="${escapeHtml(p.id)}" data-npt="${p.proj_no === 'NPT' || p.name.toUpperCase().includes('NPT') ? 'true' : 'false'}">
+            ${p.proj_no ? '[' + escapeHtml(p.proj_no) + '] ' : ''}${escapeHtml(p.name)}
+        </option>`)
+        .join('');
+
     return `
         <div class="timer-form glass-panel">
             <div class="form-group">
                 <label>Project</label>
-                <select id="timerProject" class="form-control">
+                <select id="timerProject" class="form-control" onchange="handleProjectChange(this)">
                     <option value="">-- Select project --</option>
-                    ${state.projects.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
+                    ${projectOptions}
                 </select>
             </div>
-            <div class="form-group">
-                <label>Task</label>
-                <input type="text" id="timerTask" class="form-control" placeholder="What are you working on?" />
-            </div>
-            <div class="form-group">
-                <label>Description <span class="optional">(optional)</span></label>
-                <input type="text" id="timerDescription" class="form-control" placeholder="Add details..." />
+            <div class="form-group" id="nptReasonGroup" style="display:none">
+                <label>Reason for NPT <span style="color:#f43f5e">*</span></label>
+                <input type="text" id="timerNptReason" class="form-control" placeholder="Explain reason for non-productive time..." />
             </div>
             <button class="btn primary btn-start" onclick="startMyTimer()">START TIMER</button>
         </div>`;
@@ -59,27 +60,19 @@ function renderActiveControls(entry) {
     return `
         <div class="timer-active-info glass-panel">
             <div class="active-project-badge" style="background:${escapeHtml(project?.color || '#1d4ed8')}20;border-color:${escapeHtml(project?.color || '#1d4ed8')}">
-                ${escapeHtml(project?.name || 'Unknown Project')}
+                ${project?.proj_no ? '[' + escapeHtml(project.proj_no) + '] ' : ''}${escapeHtml(project?.name || 'Unknown Project')}
             </div>
-            <div class="active-task">${escapeHtml(entry.task || '')}</div>
-            <div class="active-description">${escapeHtml(entry.description || '')}</div>
-            <button class="btn danger btn-stop" onclick="stopMyTimer('${escapeHtml(entry.id)}')">STOP &amp; SAVE</button>
+            ${entry.description ? `<div class="active-description">${escapeHtml(entry.description)}</div>` : ''}
+            <button class="btn-stop" onclick="stopMyTimer('${escapeHtml(entry.id)}')">STOP &amp; SAVE</button>
         </div>`;
-}
-
-function populateProjectSelect() {
-    const sel = document.getElementById('timerProject');
-    if (!sel || sel.options.length > 1) return;
-    state.projects.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.id; opt.textContent = p.name; sel.appendChild(opt);
-    });
 }
 
 function getMyActiveEntry() {
     return state.timeEntries.find(e =>
-        e.employee_id === state.activeProfileId && e.start_time &&
-        (!e.end_time || e.end_time === '') && (!e.total_hours || e.total_hours === 0)
+        e.employee_id === state.activeProfileId &&
+        e.start_time &&
+        (!e.end_time || e.end_time === '') &&
+        (!e.total_hours || e.total_hours === 0)
     ) || null;
 }
 
@@ -106,24 +99,51 @@ function startTickingDisplay(entry) {
 
 export function stopTimerInterval() { clearInterval(timerInterval); }
 
-window.startMyTimer = async function () {
+// Show/hide NPT reason field based on selected project
+window.handleProjectChange = function(select) {
+    const selected = select.options[select.selectedIndex];
+    const isNpt = selected?.dataset?.npt === 'true';
+    const reasonGroup = document.getElementById('nptReasonGroup');
+    if (reasonGroup) reasonGroup.style.display = isNpt ? 'block' : 'none';
+    if (!isNpt) {
+        const reasonInput = document.getElementById('timerNptReason');
+        if (reasonInput) reasonInput.value = '';
+    }
+};
+
+window.startMyTimer = async function() {
     const projectId = document.getElementById('timerProject')?.value;
-    const task = document.getElementById('timerTask')?.value?.trim();
     if (!projectId) { showNotification('Select a project first', 'warning'); return; }
-    if (!task) { showNotification('Enter a task description', 'warning'); return; }
+
+    const select = document.getElementById('timerProject');
+    const isNpt = select?.options[select.selectedIndex]?.dataset?.npt === 'true';
+    const nptReason = document.getElementById('timerNptReason')?.value?.trim();
+
+    if (isNpt && !nptReason) {
+        showNotification('Please enter a reason for NPT', 'warning');
+        document.getElementById('timerNptReason').focus();
+        return;
+    }
+
+    const description = isNpt ? nptReason : '';
+
     try {
         const entry = await apiRequest('/entries', { method: 'POST', body: JSON.stringify({
-            employee_id: state.activeProfileId, project_id: projectId, task,
-            description: document.getElementById('timerDescription')?.value?.trim() || '',
-            start_time: new Date().toISOString(), end_time: '', total_hours: 0
+            employee_id: state.activeProfileId,
+            project_id: projectId,
+            task: isNpt ? 'NPT - ' + nptReason : 'Work',
+            description,
+            start_time: new Date().toISOString(),
+            end_time: '',
+            total_hours: 0
         })});
         state.timeEntries.push(entry);
         renderTimerView();
         showNotification('Timer started', 'success');
-    } catch (e) { showNotification('Failed to start timer: ' + e.message, 'error'); }
+    } catch(e) { showNotification('Failed to start: ' + e.message, 'error'); }
 };
 
-window.stopMyTimer = async function (entryId) {
+window.stopMyTimer = async function(entryId) {
     const entry = state.timeEntries.find(e => e.id === entryId);
     if (!entry) return;
     const endTime = new Date().toISOString();
@@ -136,7 +156,7 @@ window.stopMyTimer = async function (entryId) {
         clearInterval(timerInterval);
         renderTimerView();
         showNotification(`Logged ${totalHours.toFixed(2)}h`, 'success');
-    } catch (e) { showNotification('Failed to stop timer: ' + e.message, 'error'); }
+    } catch(e) { showNotification('Failed to stop: ' + e.message, 'error'); }
 };
 
 window.stopUserTimer = window.stopMyTimer;
