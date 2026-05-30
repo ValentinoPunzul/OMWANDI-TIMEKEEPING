@@ -36,17 +36,32 @@ async function handleLogin(e) {
     e.preventDefault();
     const empNo    = document.getElementById('loginEmpNo')?.value?.trim();
     const password = document.getElementById('loginPassword')?.value;
-    if (!empNo||!password) { showLoginError('Enter your employee number and password.'); return; }
+    if (!empNo || !password) { showLoginError('Enter your employee number and password.'); return; }
     try {
-        const res = await fetch('/api/auth/login', { method:'POST',
-            headers:{'Content-Type':'application/json'}, body:JSON.stringify({emp_no:empNo, password}) });
-        if (!res.ok) { const err=await res.json().catch(()=>({})); showLoginError(err.message||'Invalid credentials.'); return; }
-        const {idToken, employee} = await res.json();
-        state.idToken=idToken; state.activeProfileId=employee.id; state.userRole=employee.role||'Employee';
+        const loginRes = await fetch('/api/auth/login', { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emp_no: empNo, password }) });
+        if (!loginRes.ok) { const err = await loginRes.json().catch(()=>({})); showLoginError(err.message || 'Invalid credentials.'); return; }
+        const { customToken, employee } = await loginRes.json();
+
+        const { firebaseApiKey } = await fetch('/api/config').then(r => r.json());
+        const tokenRes = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${firebaseApiKey}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: customToken, returnSecureToken: true }) });
+        if (!tokenRes.ok) throw new Error('Token exchange failed');
+        const { idToken } = await tokenRes.json();
+
+        state.idToken = idToken;
+        state.activeProfileId = employee.id;
+        state.userRole = employee.role || 'Employee';
         localStorage.setItem('chronos_id_token', idToken);
         localStorage.setItem('chronos_user_id', employee.id);
-        await loadAppData(); showApp();
-    } catch { showLoginError('Login failed. Check your connection.'); }
+        await loadAppData();
+        showApp();
+    } catch (err) {
+        showLoginError('Login failed. Check your connection.');
+    }
 }
 
 function showLoginError(msg) {

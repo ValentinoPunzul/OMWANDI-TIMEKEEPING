@@ -216,6 +216,39 @@ apiRouter.post('/settings/mapping', async (req, res) => {
     res.json({ success: true });
 });
 
+
+// --- Auth Routes (unprotected) ---
+app.get('/api/config', (req, res) => {
+  res.json({ firebaseApiKey: process.env.FIREBASE_API_KEY || '' });
+});
+
+app.post('/api/auth/login', checkDbConnection, async (req, res) => {
+  try {
+    const { emp_no, password } = req.body;
+    if (!emp_no || !password) return res.status(400).json({ message: 'emp_no and password are required' });
+    const snap = await db.ref('employees').orderByChild('emp_no').equalTo(emp_no).once('value');
+    const val = snap.val();
+    if (!val) return res.status(401).json({ message: 'Invalid credentials' });
+    const employee = Object.values(val)[0];
+    if (employee.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
+    const customToken = await admin.auth().createCustomToken(employee.id, { role: employee.role || 'Employee' });
+    res.json({
+      customToken,
+      employee: {
+        id: employee.id,
+        name: employee.name,
+        role: employee.role || 'Employee',
+        color: employee.color,
+        emp_no: employee.emp_no,
+        designation: employee.designation
+      }
+    });
+  } catch(err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
 app.use('/api', apiRouter);
 
 // --- Unprotected Webhook Endpoint ---
