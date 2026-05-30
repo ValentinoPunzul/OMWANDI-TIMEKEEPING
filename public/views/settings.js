@@ -97,7 +97,7 @@ export async function renderSettings() {
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
                     <h3 style="margin:0">Scoro Webhook Logs</h3>
                     <div style="display:flex;gap:.5rem">
-                        <span class="muted" style="align-self:center">Webhook URL: <code>/api/webhooks/scoro</code></span>
+                        <span class="muted" style="align-self:center">Webhook URL: <code>/webhook</code></span>
                         <button class="btn outline" onclick="refreshWebhookLogs()">↻ Refresh</button>
                     </div>
                 </div>
@@ -138,7 +138,7 @@ function renderFieldMapper(logs, currentMap) {
     if (scoroFields.length === 0) {
         return `<div class="webhook-empty">
             <p class="muted">No webhook data captured yet.</p>
-            <p class="muted">Register <code>/api/webhooks/scoro</code> in Scoro → Settings → Webhooks, then trigger a project event.</p>
+            <p class="muted">Register <code>/webhook</code> in Scoro → Settings → Webhooks, then trigger a project event.</p>
         </div>`;
     }
 
