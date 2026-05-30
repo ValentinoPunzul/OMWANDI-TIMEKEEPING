@@ -4,6 +4,8 @@ const admin = require('firebase-admin');
 const path = require('path');
 const fs = require('fs');
 const { z } = require('zod');
+const bcrypt = require('bcrypt');
+const SALT_ROUNDS = 10;
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -104,14 +106,18 @@ apiRouter.post('/employees', async (req, res) => {
     const result = employeeSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
     const id = req.body.id || 'emp_' + Date.now();
-    await db.ref('employees/' + id).set({ ...result.data, id });
+    const data = { ...result.data, id };
+    if (data.password) data.password = await bcrypt.hash(data.password, SALT_ROUNDS);
+    await db.ref('employees/' + id).set(data);
     res.status(201).json({ id });
 });
 
 apiRouter.put('/employees/:id', async (req, res) => {
     const result = employeeSchema.partial().safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
-    await db.ref('employees/' + req.params.id).update(result.data);
+    const data = { ...result.data };
+    if (data.password) data.password = await bcrypt.hash(data.password, SALT_ROUNDS);
+    await db.ref('employees/' + req.params.id).update(data);
     res.json({ success: true });
 });
 
@@ -230,7 +236,8 @@ app.post('/api/auth/login', checkDbConnection, async (req, res) => {
     const val = snap.val();
     if (!val) return res.status(401).json({ message: 'Invalid credentials' });
     const employee = Object.values(val)[0];
-    if (employee.password !== password) return res.status(401).json({ message: 'Invalid credentials' });
+    const passwordMatch = await bcrypt.compare(password, employee.password || '');
+    if (!passwordMatch) return res.status(401).json({ message: 'Invalid credentials' });
     const customToken = await admin.auth().createCustomToken(employee.id, { role: employee.role || 'Employee' });
     res.json({
       customToken,
